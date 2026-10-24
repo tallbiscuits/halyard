@@ -84,8 +84,8 @@ release() {
   local ver=$1 rel=dist/release fl=dist/flasher
   [[ "$ver" =~ ^[A-Za-z0-9][A-Za-z0-9.+-]*$ ]] || { echo "bad version: $ver" >&2; exit 2; }
   [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "note: uncommitted changes go into this build" >&2
-  run_tests
   HALYARD_VERSION=$ver $PIO run -d firmware -e geek
+  run_tests  # after the build: the update page's test checks this firmware.bin
   serial_image; mainsail_release
   rm -rf dist && mkdir -p "$rel" "$fl"
   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/$BUILD:/fw:ro" -v "$BOOT_APP0:/boot_app0.bin:ro" \
