@@ -20,6 +20,7 @@
 #include "library.h"
 #include "multipart.h"
 #include "printer.h"
+#include "release.h"
 #include "service.h"
 
 using namespace halyard;
@@ -1676,6 +1677,7 @@ void test_download_several_files_as_zip() {
 }
 
 void test_config_root_holds_halyard_cfg() {
+  write_all(g_root + "/navi.json", "[]");  // up to 0.5.0, the update page's sidebar link
   Rig r;
   r.svc.ws_open(1);
   std::string cfg = g_root + "/halyard.cfg";
@@ -1686,13 +1688,13 @@ void test_config_root_holds_halyard_cfg() {
   TEST_ASSERT_EQUAL_STRING("halyard.cfg", dir["result"]["files"][0]["filename"]);
   TEST_ASSERT_EQUAL_STRING("rw", dir["result"]["files"][0]["permissions"]);
   TEST_ASSERT_EQUAL_STRING("rw", dir["result"]["root_info"]["permissions"]);
-  // .theme/navi.json puts a link to the update page in Mainsail's sidebar.
-  TEST_ASSERT_EQUAL_STRING(".theme", dir["result"]["dirs"][0]["dirname"]);
-  JsonDocument theme = r.result(1, "server.files.get_directory", "{\"path\":\"config/.theme\"}");
-  TEST_ASSERT_EQUAL_STRING("navi.json", theme["result"]["files"][0]["filename"]);
-  std::string navi = r.svc.download_path("config/.theme/navi.json");
-  TEST_ASSERT_FALSE(navi.empty());
-  TEST_ASSERT_EQUAL_STRING("/halyard/", parse(read_all(navi))[0]["href"]);
+  // No sidebar link to the update page any more (the Update Manager does its work), and the
+  // old file is removed.
+  TEST_ASSERT_EQUAL(0, dir["result"]["dirs"].size());
+  TEST_ASSERT_EQUAL(404, r.call(1, "server.files.get_directory", "{\"path\":\"config/.theme\"}")["error"]["code"].as<int>());
+  TEST_ASSERT_EQUAL_STRING("", r.svc.download_path("config/.theme/navi.json").c_str());
+  struct stat st;
+  TEST_ASSERT_NOT_EQUAL(0, stat((g_root + "/navi.json").c_str(), &st));
   JsonDocument list = r.result(1, "server.files.list", "{\"root\":\"config\"}");
   TEST_ASSERT_EQUAL_STRING("halyard.cfg", list["result"][0]["path"]);
   // Downloaded with the WiFi password masked; never served straight from the card.
@@ -1931,6 +1933,30 @@ void test_restart_reads_config_and_warnings_show() {
   TEST_ASSERT_EQUAL(0, info2["result"]["warnings"].size());
 }
 
+// Found on the GEEK with the printer off: SAVE & RESTART's FIRMWARE_RESTART was refused as
+// "the printer is not connected", and the panel's firmware restart never read halyard.cfg,
+// so a changed setting needed a reboot.
+void test_restart_reads_config_with_the_printer_off() {
+  Rig r;
+  r.m.unplugged = true;
+  r.svc.ws_open(1);
+  r.run_until([] { return false; }, 2000);
+  TEST_ASSERT_TRUE(r.link.state() != LinkState::Ready);
+  int restarts = 0;
+  r.svc.on_restart = [&] { restarts++; };
+  JsonDocument g = r.result(1, "printer.gcode.script", "{\"script\":\"FIRMWARE_RESTART\"}");
+  TEST_ASSERT_EQUAL_STRING("ok", g["result"]);
+  TEST_ASSERT_EQUAL(1, restarts);
+  // Anything for the printer still needs it.
+  JsonDocument m = r.call(1, "printer.gcode.script", "{\"script\":\"FIRMWARE_RESTART\\nM105\"}");
+  TEST_ASSERT_EQUAL(503, m["error"]["code"].as<int>());
+  TEST_ASSERT_EQUAL(1, restarts);
+  // Mainsail's firmware restart button, and its restart.
+  r.result(1, "printer.firmware_restart");
+  r.result(1, "printer.restart");
+  TEST_ASSERT_EQUAL(3, restarts);
+}
+
 void test_address_on_the_printers_screen() {
   Rig r;
   r.svc.ws_open(1);
@@ -2002,14 +2028,14 @@ void test_mainsail_in_the_update_manager() {
 
   call("machine.update.status", "{\"refresh\":true}");  // "check for updates"
   TEST_ASSERT_EQUAL(1, checks);
-  svc.update_checked("cannot reach 192.168.1.20");  // the source did not answer: said, not hidden
+  svc.update_checked("cannot reach 192.168.1.20", "", "");  // the source did not answer: said, not hidden
   auto refreshed = notes("notify_update_refreshed");
   TEST_ASSERT_EQUAL(1, refreshed.size());
   JsonObject rm = refreshed[0]["params"][0]["version_info"]["mainsail"];
   TEST_ASSERT_EQUAL_STRING("v2.19.0-halyard.1", rm["remote_version"]);
   TEST_ASSERT_EQUAL(1, rm["warnings"].size());
   TEST_ASSERT_TRUE(rm["warnings"][0].as<std::string>().find("cannot reach 192.168.1.20") != std::string::npos);
-  svc.update_checked("");  // it answers now
+  svc.update_checked("", "", "");  // it answers now
   TEST_ASSERT_EQUAL(0, call("machine.update.status", "{}")["result"]["version_info"]["mainsail"]["warnings"].size());
 
   // The update button.
@@ -2033,6 +2059,91 @@ void test_mainsail_in_the_update_manager() {
   JsonObject done = dd["result"]["version_info"]["mainsail"];
   TEST_ASSERT_FALSE(call("machine.update.status", "{}")["result"]["busy"].as<bool>());
   TEST_ASSERT_EQUAL_STRING("v2.19.0-halyard.1", done["version"]);
+}
+
+void test_release_sums() {
+  ReleaseSums s;
+  std::string fw(64, 'a'), img(64, 'b');
+  std::string text = fw + "  firmware.bin\n" + img + "  halyard-0.6.0.bin\n" + std::string(64, 'c') +
+                     "  halyard-card-0.6.0.zip\n" + std::string(64, 'd') + "  mainsail-v2.19.0-halyard.11.zip\n";
+  TEST_ASSERT_TRUE(parse_release_sums(text, s));
+  TEST_ASSERT_EQUAL_STRING("0.6.0", s.version.c_str());
+  TEST_ASSERT_EQUAL_STRING(fw.c_str(), s.firmware_sha256.c_str());
+  // sha256sum -b, Windows line ends, upper case.
+  TEST_ASSERT_TRUE(parse_release_sums(std::string(64, 'A') + " *firmware.bin\r\n" + img + " *halyard-1.0.0-rc.1.bin\r\n", s));
+  TEST_ASSERT_EQUAL_STRING("1.0.0-rc.1", s.version.c_str());
+  TEST_ASSERT_EQUAL_STRING(fw.c_str(), s.firmware_sha256.c_str());
+  // No merged image (no version), no firmware.bin, a page that isn't the file.
+  TEST_ASSERT_FALSE(parse_release_sums(fw + "  firmware.bin\n", s));
+  TEST_ASSERT_FALSE(parse_release_sums(img + "  halyard-0.6.0.bin\n", s));
+  TEST_ASSERT_FALSE(parse_release_sums("<html>Not Found</html>", s));
+  TEST_ASSERT_FALSE(parse_release_sums("abc  firmware.bin\n" + img + "  halyard-0.6.0.bin\n", s));
+}
+
+void test_halyard_in_the_update_manager() {
+  Rig r;
+  Platform p = Rig::platform(&r.rebooted);
+  p.firmware = "0.5.0";  // no Mainsail hooks: the firmware's row alone
+  Service svc(r.link, r.printer, r.delivery, r.lib, p);
+  svc.ws_open(1);
+  std::vector<std::string> started;
+  svc.on_update_check = [] {};
+  svc.on_update = [&](const std::string& n, std::string&) { started.push_back(n); return true; };
+  auto call = [&](const std::string& method, const std::string& params) {
+    return parse(svc.ws_message(1, "{\"jsonrpc\":\"2.0\",\"method\":\"" + method +
+                                       "\",\"params\":" + params + ",\"id\":7}"));
+  };
+  bool listed = false;
+  JsonDocument info = call("server.info", "{}");
+  for (JsonVariantConst c : info["result"]["components"].as<JsonArrayConst>()) listed |= c == "update_manager";
+  TEST_ASSERT_TRUE(listed);
+  JsonDocument st = call("machine.update.status", "{}");
+  TEST_ASSERT_FALSE(st["result"]["version_info"]["mainsail"].is<JsonObjectConst>());
+  JsonObject h = st["result"]["version_info"]["halyard"];
+  TEST_ASSERT_EQUAL_STRING("web", h["configured_type"]);
+  TEST_ASSERT_EQUAL_STRING("v0.5.0", h["version"]);  // as the tags are, for the release link
+  TEST_ASSERT_EQUAL_STRING("?", h["remote_version"]);  // unknown before a check
+  // Nothing to install before a check has found a release.
+  TEST_ASSERT_EQUAL(400, call("machine.update.client", "{\"name\":\"halyard\"}")["error"]["code"].as<int>());
+
+  svc.update_checked("", "", "cannot reach github.com");
+  JsonDocument bad = call("machine.update.status", "{}");
+  JsonObject hb = bad["result"]["version_info"]["halyard"];
+  TEST_ASSERT_EQUAL_STRING("?", hb["remote_version"]);
+  TEST_ASSERT_EQUAL(1, hb["warnings"].size());
+  TEST_ASSERT_TRUE(hb["warnings"][0].as<std::string>().find("cannot reach github.com") != std::string::npos);
+
+  svc.update_checked("", "0.6.0", "");
+  JsonDocument good = call("machine.update.status", "{}");
+  JsonObject hg = good["result"]["version_info"]["halyard"];
+  TEST_ASSERT_EQUAL_STRING("v0.6.0", hg["remote_version"]);
+  TEST_ASSERT_EQUAL(0, hg["warnings"].size());
+
+  // Not while a file is being copied to the printer: the new firmware starts with a restart.
+  // (The Rig's own Service starts the copy; both share its Delivery.)
+  r.svc.ws_open(1);
+  r.ready();
+  Form f;
+  TEST_ASSERT_EQUAL(201, r.upload(false, f.type(), f.file("big.gcode", harmless_job(400, 200, 60)).done()).status);
+  r.result(1, "printer.print.start", "{\"filename\":\"big.gcode\"}");
+  TEST_ASSERT_TRUE(r.run_until([&] { return r.delivery.progress().bytes > 1000; }, 60000));
+  TEST_ASSERT_EQUAL(409, call("machine.update.client", "{\"name\":\"halyard\"}")["error"]["code"].as<int>());
+  TEST_ASSERT_EQUAL(0, started.size());
+  r.result(1, "printer.print.cancel");
+  TEST_ASSERT_TRUE(r.run_until([&] { return !r.delivery.busy(); }, 30000));
+
+  // "Update all": the firmware first, since a new firmware names a new Mainsail.
+  TEST_ASSERT_EQUAL_STRING("ok", call("machine.update.full", "{}")["result"]);
+  TEST_ASSERT_EQUAL(1, started.size());
+  TEST_ASSERT_EQUAL_STRING("halyard", started[0].c_str());
+  TEST_ASSERT_TRUE(call("machine.update.status", "{}")["result"]["busy"].as<bool>());
+  svc.update_progress("halyard", "Update failed: the download was cut off. Halyard is unchanged.", true);
+  TEST_ASSERT_FALSE(call("machine.update.status", "{}")["result"]["busy"].as<bool>());
+  TEST_ASSERT_EQUAL_STRING("ok", call("machine.update.client", "{\"name\":\"halyard\"}")["result"]);
+  TEST_ASSERT_EQUAL(2, started.size());
+  // Without Mainsail's hooks there is no mainsail row to update.
+  svc.update_progress("halyard", "done", true);
+  TEST_ASSERT_EQUAL(400, call("machine.update.client", "{\"name\":\"mainsail\"}")["error"]["code"].as<int>());
 }
 
 void test_http_routes() {
@@ -2187,8 +2298,11 @@ int main() {
   RUN_TEST(test_marlin_cfg);
   RUN_TEST(test_marlin_cfg_stock_and_without_m503);
   RUN_TEST(test_restart_reads_config_and_warnings_show);
+  RUN_TEST(test_restart_reads_config_with_the_printer_off);
   RUN_TEST(test_address_on_the_printers_screen);
   RUN_TEST(test_mainsail_in_the_update_manager);
+  RUN_TEST(test_release_sums);
+  RUN_TEST(test_halyard_in_the_update_manager);
   RUN_TEST(test_line_noise_stays_out_of_the_console);
   RUN_TEST(test_restart_for_update);
   RUN_TEST(test_print_found_running_gets_its_name);

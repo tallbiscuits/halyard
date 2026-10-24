@@ -56,6 +56,8 @@ struct Platform {
   // The Mainsail this firmware ships with (D13: Halyard's build, "v2.19.0-halyard.1"). The
   // update manager offers it; "" offers nothing.
   std::string ui_release;
+  // Halyard's own version for its update manager row, "0.5.0" (no build); "" leaves it out.
+  std::string firmware;
 };
 
 struct HttpResponse {
@@ -84,14 +86,17 @@ class Service {
   void show_on_printer(const std::string& text);
   void set_hostname(const std::string& h) { platform_.hostname = h; }  // halyard.cfg's
 
-  // ---- Mainsail's update manager (machine.update.*): a "mainsail" entry ---------------------
-  // It offers Platform::ui_release, the Mainsail Halyard was tested with, not upstream's
-  // latest (D13). The glue checks that its source answers (on refresh) and runs updates, both
-  // in the background.
+  // ---- Mainsail's update manager (machine.update.*): "mainsail" and "halyard" entries -------
+  // "mainsail" offers Platform::ui_release, the Mainsail Halyard was tested with, not
+  // upstream's latest (D13). "halyard" offers the newest release of the firmware, which the
+  // check finds. The glue checks (on refresh) and runs updates ("mainsail" or "halyard"),
+  // both in the background.
   std::function<void()> on_update_check;
   std::function<bool(const std::string& name, std::string& err)> on_update;
-  // After a check: why the release cannot be fetched, or "". Sends notify_update_refreshed.
-  void update_checked(const std::string& error);
+  // After a check: why Platform::ui_release cannot be fetched, or "", and the newest
+  // firmware release ("0.6.0"), or "" with why not. Sends notify_update_refreshed.
+  void update_checked(const std::string& ui_error, const std::string& release,
+                      const std::string& release_error);
   // A line for Mainsail's update dialog (notify_update_response); complete ends the update.
   void update_progress(const std::string& name, const std::string& message, bool complete);
 
@@ -221,6 +226,8 @@ class Service {
   int m_update_status(const Call&, JsonVariantConst, JsonDocument&, std::string&);
   int m_update_client(const Call&, JsonVariantConst, JsonDocument&, std::string&);
   int m_update_refresh(const Call&, JsonVariantConst, JsonDocument&, std::string&);
+  int m_update_full(const Call&, JsonVariantConst, JsonDocument&, std::string&);
+  int start_update(const std::string& name, JsonDocument& r, std::string& err);
   void update_status(JsonObject r);
   int m_webcams(const Call&, JsonVariantConst, JsonDocument&, std::string&);
   int m_announcements(const Call&, JsonVariantConst, JsonDocument&, std::string&);
@@ -330,7 +337,6 @@ class Service {
   void ask_settings();
   bool marlin_info(JsonObject o, bool with_path) const;
   std::string marlin_text() const;
-  std::string navi_path() const;
   bool save_config(const std::string& text, std::string& err);
   void screen_poll();
   static void metadata_json(const Metadata& m, JsonObject o);
@@ -362,6 +368,7 @@ class Service {
   uint32_t reboot_at_ = 0;  // machine.reboot: after its reply has gone out
   std::vector<std::string> config_warnings_;
   std::string ui_check_error_;
+  std::string release_, release_error_;  // the newest firmware release, from the last check
   bool update_busy_ = false;
   std::string screen_text_, screen_shown_;  // shown_: what the printer has, "" after a reconnect
 

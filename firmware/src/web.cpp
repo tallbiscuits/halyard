@@ -3,7 +3,6 @@
 
 #include <esp_http_server.h>
 #include <esp_log.h>
-#include <esp_ota_ops.h>
 #include <lwip/sockets.h>
 #include <unistd.h>
 
@@ -13,6 +12,7 @@
 #include <memory>
 #include <string>
 
+#include "ota.h"
 #include "update_page.h"
 #include "updates.h"
 
@@ -468,47 +468,17 @@ esp_err_t update_handler(httpd_req_t* req) {
     can = svc->can_restart(why);
   }
   if (!can) return send_error(req, 409, why.c_str());
-  const esp_partition_t* part = esp_ota_get_next_update_partition(nullptr);
-  if (!part) return send_error(req, 500, "no OTA partition");
-  if (req->content_len == 0 || req->content_len > part->size)
-    return send_error(req, 413, "not a firmware image of a size that fits");
-  esp_ota_handle_t ota;
-  if (esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &ota) != ESP_OK)
-    return send_error(req, 500, "cannot start the update");
-  // The image header and the app description after the first segment header: an ESP32-S3
-  // app, not the bootloader a merged (USB flash) image starts with, whose checks would pass.
-  uint8_t head[36];
-  size_t have = 0;
-  esp_err_t err = ESP_OK;
-  const char* problem = nullptr;
+  if (req->content_len == 0) return send_error(req, 413, "not a firmware image of a size that fits");
+  ota::Writer w;
+  if (!w.begin(req->content_len)) return send_error(req, w.status(), w.error().c_str());
+  bool going = true;
   bool whole = read_body(req, [&](const uint8_t* d, size_t n) {
-    if (problem) return;
-    if (have < sizeof head) {
-      size_t take = std::min(n, sizeof head - have);
-      memcpy(head + have, d, take);
-      have += take;
-      if (have == sizeof head) {
-        uint32_t desc = head[32] | head[33] << 8 | head[34] << 16 | (uint32_t)head[35] << 24;
-        if (head[0] != 0xE9) problem = "not an ESP32 firmware image";
-        else if ((head[12] | head[13] << 8) != 9) problem = "an image for another chip, not the ESP32-S3";
-        else if (desc != 0xABCD5432) problem = "not an app image (use firmware.bin, not a USB flash image)";
-      }
-    }
-    if (!problem && (err = esp_ota_write(ota, d, n)) != ESP_OK) problem = "flash write failed";
+    if (going) going = w.write(d, n);
   });
-  if (whole && !problem && have < sizeof head) problem = "not an ESP32 firmware image";
-  if (!whole || problem) {
-    esp_ota_abort(ota);
-    if (!whole) return ESP_FAIL;
-    return send_error(req, 400, problem);
-  }
-  if ((err = esp_ota_end(ota)) != ESP_OK)  // checks the image: chip, segments, SHA-256
-    return send_error(req, 400, err == ESP_ERR_OTA_VALIDATE_FAILED ? "the image is invalid"
-                                                                   : "cannot finish the update");
-  if (esp_ota_set_boot_partition(part) != ESP_OK)
-    return send_error(req, 500, "cannot switch to the new image");
+  if (!whole) return ESP_FAIL;
+  if (!going || !w.finish()) return send_error(req, w.status(), w.error().c_str());
   HttpResponse r;
-  r.body = std::string("{\"result\":\"ok\",\"partition\":\"") + part->label +
+  r.body = std::string("{\"result\":\"ok\",\"partition\":\"") + w.partition() +
            "\",\"restarting\":true}";
   esp_err_t e = send(req, r);
   restart_soon();

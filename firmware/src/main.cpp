@@ -94,6 +94,7 @@ static halyard::Platform platform() {
   p.config_path = kConfigPath;
   p.ui_version = [] { return webui.version(); };
   p.ui_release = HALYARD_MAINSAIL;
+  p.firmware = HALYARD_VERSION;
   return p;
 }
 static Service service(link_, printer, delivery, library, platform());

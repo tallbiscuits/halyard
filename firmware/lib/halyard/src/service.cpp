@@ -27,9 +27,6 @@ const int kMethodNotFound = -32601, kInvalidRequest = -32600, kParseError = -327
 const char* const kConfigName = "halyard.cfg";
 const char* const kMarlinName = "marlin.cfg";  // M503's report, made on download
 const size_t kMaxConfig = 16 * 1024;
-// Mainsail's custom sidebar links (config/.theme/navi.json): Halyard's update page.
-const char* const kNavi =
-    "[{\"title\":\"Halyard updates\",\"href\":\"/halyard/\",\"target\":\"_blank\",\"position\":900}]\n";
 
 const uint32_t kStatusPushMs = 250, kTempSampleMs = 1000, kDbSaveMs = 2000;
 const uint32_t kProcStatMs = 5000;  // notify_proc_stat_update; Moonraker's is every second
@@ -458,6 +455,7 @@ Service::Service(Link& link, Printer& printer, Delivery& delivery, Library& libr
       {"machine.update.refresh", &Service::m_update_refresh},
       {"machine.update.client", &Service::m_update_client},
       {"machine.update.upgrade", &Service::m_update_client},
+      {"machine.update.full", &Service::m_update_full},
       {"machine.reboot", &Service::m_machine_reboot},
       {"server.webcams.list", &Service::m_webcams},
       {"server.announcements.list", &Service::m_announcements},
@@ -505,16 +503,11 @@ Service::~Service() = default;
 
 void Service::begin() {
   db_load();
-  std::string have, path = navi_path();
-  if (!path.empty() && !(read_file(path, have) && have == kNavi)) write_file(path, kNavi);
-}
-
-// Next to Mainsail's database, where it is Halyard's; offered as config/.theme/navi.json.
-std::string Service::navi_path() const {
+  // Up to 0.5.0 a navi.json beside the database put the update page in Mainsail's sidebar.
+  // The Update Manager does its work now, and the page is a fallback at /halyard/.
   const std::string& db = platform_.db_path;
-  if (db.empty() || platform_.config_path.empty()) return "";
   size_t slash = db.rfind('/');
-  return (slash == std::string::npos ? std::string(".") : db.substr(0, slash)) + "/navi.json";
+  if (slash != std::string::npos) ::remove((db.substr(0, slash) + "/navi.json").c_str());
 }
 
 double Service::wall() const {
@@ -719,11 +712,6 @@ bool Service::http(const std::string& method, const std::string& path, const std
 
 std::string Service::download_path(const std::string& path) const {
   std::string rel, decoded = url_decode(path);
-  if (decoded == "config/.theme/navi.json") {
-    struct stat st;
-    std::string navi = navi_path();
-    return !navi.empty() && stat(navi.c_str(), &st) == 0 ? navi : "";
-  }
   if (!strip_gcodes_root(decoded, rel)) return "";
   bool ok = Library::valid_name(rel);
   if (!ok && starts_with(rel, ".thumbs/")) {
@@ -2260,7 +2248,15 @@ int Service::m_gcode_script(const Call& c, JsonVariantConst p, JsonDocument& r,
                             std::string& err) {
   std::string script = str(p["script"]);
   if (trim(script).empty()) return err = "missing script", kBadRequest;
-  if (link_.state() != LinkState::Ready) return err = "the printer is not connected", kUnavailable;
+  if (link_.state() != LinkState::Ready) {
+    // Only Halyard's own restart works without the printer: SAVE & RESTART reads halyard.cfg.
+    for (auto& raw : split(script, '\n')) {
+      std::string line = trim(raw);
+      if (line.empty()) continue;
+      std::string cmd = upper(words_of(line)[0]);
+      if (cmd != "FIRMWARE_RESTART" && cmd != "RESTART") return err = "the printer is not connected", kUnavailable;
+    }
+  }
   for (auto& raw : split(script, '\n'))
     if (!trim(raw).empty()) store_gcode(trim(raw), true);
   if (!moves_homed(script, err)) {
@@ -2354,7 +2350,8 @@ int Service::m_server_info(const Call&, JsonVariantConst, JsonDocument& r, std::
   for (const char* c : {"server", "file_manager", "machine", "database", "data_store",
                         "proc_stats", "history", "octoprint_compat"})
     comps.add(c);
-  if (platform_.ui_version) comps.add("update_manager");  // Mainsail shows its panel then
+  // Mainsail shows its panel then.
+  if (platform_.ui_version || !platform_.firmware.empty()) comps.add("update_manager");
   r["failed_components"].to<JsonArray>();
   JsonArray dirs = r["registered_directories"].to<JsonArray>();
   dirs.add("gcodes");
@@ -2466,26 +2463,39 @@ void Service::update_status(JsonObject r) {
   r["github_requests_remaining"] = 60;
   r["github_limit_reset_time"] = 0;
   JsonObject info = r["version_info"].to<JsonObject>();
-  if (!platform_.ui_version) return;
-  JsonObject m = info["mainsail"].to<JsonObject>();
-  std::string have = platform_.ui_version();
-  m["name"] = "mainsail";
-  m["owner"] = "tallbiscuits";  // Halyard's build of Mainsail ships with Halyard's releases
-  m["repo_name"] = "halyard";
-  m["version"] = have.empty() ? "?" : have;
-  m["remote_version"] = platform_.ui_release.empty() ? "?" : platform_.ui_release;
-  m["channel"] = "stable";
-  m["configured_type"] = "web";
-  m["detected_type"] = "web";
-  m["is_valid"] = true;
-  m["info_tags"].to<JsonArray>();
-  m["anomalies"].to<JsonArray>();
-  JsonArray w = m["warnings"].to<JsonArray>();
-  if (!ui_check_error_.empty()) w.add("Mainsail " + platform_.ui_release + " cannot be fetched: " + ui_check_error_);
+  // A web client's row: Mainsail offers the update when remote_version is above version by
+  // semver, and links to the release tagged remote_version in owner/repo_name.
+  auto row = [&](const char* name, const std::string& version, const std::string& remote) {
+    JsonObject m = info[name].to<JsonObject>();
+    m["name"] = name;
+    m["owner"] = "tallbiscuits";  // Halyard's build of Mainsail ships with Halyard's releases
+    m["repo_name"] = "halyard";
+    m["version"] = version.empty() ? "?" : version;
+    m["remote_version"] = remote.empty() ? "?" : remote;
+    m["channel"] = "stable";
+    m["configured_type"] = "web";
+    m["detected_type"] = "web";
+    m["is_valid"] = true;
+    m["info_tags"].to<JsonArray>();
+    m["anomalies"].to<JsonArray>();
+    return m["warnings"].to<JsonArray>();
+  };
+  if (platform_.ui_version) {
+    JsonArray w = row("mainsail", platform_.ui_version(), platform_.ui_release);
+    if (!ui_check_error_.empty()) w.add("Mainsail " + platform_.ui_release + " cannot be fetched: " + ui_check_error_);
+  }
+  if (!platform_.firmware.empty()) {
+    // Tags are "v0.5.0"; the firmware names itself "0.5.0".
+    JsonArray w = row("halyard", "v" + platform_.firmware, release_.empty() ? "" : "v" + release_);
+    if (!release_error_.empty()) w.add("No Halyard release found: " + release_error_);
+  }
 }
 
-void Service::update_checked(const std::string& error) {
-  ui_check_error_ = error;
+void Service::update_checked(const std::string& ui_error, const std::string& release,
+                             const std::string& release_error) {
+  ui_check_error_ = ui_error;
+  release_ = release;
+  release_error_ = release_error;
   JsonDocument d;
   update_status(d.to<JsonArray>().add<JsonObject>());
   notify("notify_update_refreshed", d.as<JsonVariantConst>());
@@ -2493,9 +2503,25 @@ void Service::update_checked(const std::string& error) {
 
 // Mainsail's update button (machine.update.client, or .upgrade in newer Moonraker).
 int Service::m_update_client(const Call&, JsonVariantConst p, JsonDocument& r, std::string& err) {
-  std::string name = str(p["name"]);
-  if (name != "mainsail" || !platform_.ui_version || !on_update) return err = "Halyard cannot update " + name, kBadRequest;
+  return start_update(str(p["name"]), r, err);
+}
+
+// Its "update all", shown when both rows have an update: the firmware first, since a new
+// firmware names a new Mainsail, which its own row then offers.
+int Service::m_update_full(const Call&, JsonVariantConst, JsonDocument& r, std::string& err) {
+  bool firmware = !platform_.firmware.empty() && !release_.empty() && release_ != platform_.firmware;
+  return start_update(firmware ? "halyard" : "mainsail", r, err);
+}
+
+int Service::start_update(const std::string& name, JsonDocument& r, std::string& err) {
+  bool known = (name == "mainsail" && platform_.ui_version) ||
+               (name == "halyard" && !platform_.firmware.empty());
+  if (!known || !on_update) return err = "Halyard cannot update " + name, kBadRequest;
   if (update_busy_) return err = "an update is running already", kConflict;
+  if (name == "halyard") {
+    if (release_.empty()) return err = "no Halyard release found yet: check for updates first", kBadRequest;
+    if (!can_restart(err)) return kConflict;  // the new firmware starts with a restart
+  }
   if (!on_update(name, err)) return kBadRequest;
   update_busy_ = true;
   r.set("ok");
@@ -2652,8 +2678,10 @@ int Service::m_emergency_stop(const Call&, JsonVariantConst, JsonDocument& r, st
   return 0;
 }
 
+// Mainsail's restart buttons do what the G-code does: read halyard.cfg again and reconnect.
 int Service::m_restart(const Call&, JsonVariantConst, JsonDocument& r, std::string&) {
   if (delivery_.busy()) delivery_.abort();
+  if (on_restart) on_restart();
   link_.reconnect();
   r.set("ok");
   return 0;
@@ -2911,12 +2939,10 @@ int Service::m_files_directory(const Call&, JsonVariantConst p, JsonDocument& r,
   std::string path = p["path"].isNull() ? "gcodes" : str(p["path"]);
   while (!path.empty() && path.back() == '/') path.pop_back();
   while (!path.empty() && path[0] == '/') path.erase(0, 1);
-  if (path != "gcodes" && path != "config" && path != "config/.theme")
+  if (path != "gcodes" && path != "config")
     return err = "Directory does not exist", kNotFound;
   JsonArray dirs = r["dirs"].to<JsonArray>();
   JsonArray files = r["files"].to<JsonArray>();
-  struct stat navi;
-  bool has_navi = !navi_path().empty() && stat(navi_path().c_str(), &navi) == 0;
   if (path == "gcodes") {
     bool extended = truthy(p["extended"]);
     for (auto& n : lib_.names()) {
@@ -2933,19 +2959,6 @@ int Service::m_files_directory(const Call&, JsonVariantConst p, JsonDocument& r,
     if (!config_info(o, false)) files.remove(0);
     JsonObject m = files.add<JsonObject>();
     if (!marlin_info(m, false)) files.remove(files.size() - 1);
-    if (has_navi) {  // Mainsail then lists it, and finds navi.json there
-      JsonObject d = dirs.add<JsonObject>();
-      d["dirname"] = ".theme";
-      d["modified"] = (double)navi.st_mtime;
-      d["size"] = 0;
-      d["permissions"] = "r";
-    }
-  } else if (has_navi) {
-    JsonObject o = files.add<JsonObject>();
-    o["filename"] = "navi.json";
-    o["modified"] = (double)navi.st_mtime;
-    o["size"] = (uint32_t)navi.st_size;
-    o["permissions"] = "r";
   }
   uint64_t total = 0, used = 0;
   if (platform_.disk && platform_.disk(total, used)) {

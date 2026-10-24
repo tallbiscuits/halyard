@@ -195,8 +195,9 @@ std::string settings_file(const Settings& s) {
   t += std::string("screen_messages: ") + (s.screen_messages ? "on" : "off") + "\n";
   t += "\n";
   t += "[updates]\n";
-  t += "# Where Halyard gets Mainsail when the card has none, and for Mainsail's Update Manager:\n";
-  t += "# a folder holding mainsail-<version>.zip. Empty: Halyard's own releases.\n";
+  t += "# Where Halyard gets Mainsail when the card has none, and both rows of Mainsail's Update\n";
+  t += "# Manager: a folder holding mainsail-<version>.zip and a release's SHA256SUMS and\n";
+  t += "# firmware.bin (./run.sh files serves one). Empty: Halyard's own releases.\n";
   t += kv("source", s.update_source);
   return t;
 }

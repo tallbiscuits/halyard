@@ -27,9 +27,11 @@ run it against a temporary folder and a simulated Marlin. Everything in it is dr
 | `lib/halyard/src/zip_tar.*` | Mainsail's release zip, as it downloads, into the tar `WebUi::Install` takes. Each deflated entry becomes `.gz` without decompressing. |
 | `lib/halyard/src/zip_stream.*` | The archive `server.files.zip` promises, made as it downloads, with nothing written to the card. |
 | `lib/halyard/src/multipart.*`, `gcode_line.*` | A streaming `multipart/form-data` parser for uploads, and G-code line helpers. |
+| `lib/halyard/src/release.*` | Reads a release's `SHA256SUMS`: its version and `firmware.bin`'s checksum. |
 | `src/main.cpp` | WiFi, NVS, loading `halyard.cfg`, the USB console, mDNS (`_octoprint._tcp` for slicers) and the OTA trial. |
 | `src/web.cpp` | `esp_http_server`: the websocket, uploads, Mainsail from the card, `/halyard/*`, and the access check on every route. |
-| `src/updates.*` | A background task that fetches Halyard's Mainsail from `[updates] source`. |
+| `src/updates.*` | A background task for the Update Manager: checks for and fetches Halyard's Mainsail and firmware from `[updates] source`. |
+| `src/ota.*` | Writes a `firmware.bin` to the other app slot, for the update page and the Update Manager. |
 | `src/update_page.h` | The update page, `GET /halyard/`. Built into the firmware, so it works without Mainsail or a card. |
 | `version.py` | Writes `src/version.h` (git-ignored): the version, the build time and the Mainsail it ships with. |
 | `partitions.csv` | The 16 MB partition table (D14), with two app slots for OTA. |
@@ -71,11 +73,14 @@ Settings are in `halyard.cfg` at the card's root, in Klipper's format:
 - `[wifi]`: ssid, password, hostname
 - `[access]`: trusted, api_key
 - `[printer]`: binary_transfer, screen_messages
-- `[updates]`: source (where `mainsail-<version>.zip` is; empty means Halyard's releases)
+- `[updates]`: source (where `mainsail-<version>.zip`, `SHA256SUMS` and `firmware.bin` are;
+  empty means Halyard's releases)
 
 Mainsail lists it under **Machine** (it is the only writable file in the `config` root), and
 **SAVE & RESTART** reads it again: Mainsail sends `FIRMWARE_RESTART` for a `.cfg` file, and
-Halyard reads the file before reconnecting to the printer. WiFi changes restart Halyard (not
+Halyard reads the file before reconnecting to the printer, also with the printer off (then
+`FIRMWARE_RESTART` and `RESTART` are the only commands it takes). Mainsail's restart buttons
+do the same. WiFi changes restart Halyard (not
 during a hand-off); the rest applies at once. Mistakes go to Mainsail's console and, as
 Moonraker warnings, to its notification bell. The setting then keeps its default.
 
@@ -156,11 +161,31 @@ or https) and streams it through `ZipToTar` into the installer.
   update page offers "Go back to Mainsail vX".
 - The certificate bundle is ESP-IDF's (`esp_crt_bundle.h`).
 
+**The halyard row** is the firmware. Its version is the running one (`v0.5.0`), and the check
+(30 s after WiFi comes up, and on refresh) reads `SHA256SUMS` from `[updates] source`, or
+from the latest GitHub release without one. The merged image's name in it
+(`halyard-<version>.bin`) is the release's version, and Mainsail offers **Update** when that
+is above the running one by semver. A build between releases (`0.5.0-g1a2b3c4`) is below its
+release, so the panel offers that release.
+
+- **Update** reads `SHA256SUMS` again, downloads that release's `firmware.bin` onto the other
+  app slot (the same checks as the update page), and compares its SHA-256 with the file's.
+  Only then does it switch slots and restart. The new firmware is on trial (below), and
+  Mainsail reconnecting confirms it.
+- It is refused while a file is being copied to the printer, and a copy started during the
+  download stops the update before the restart. Mainsail's own panel also waits while the
+  printer prints, although Halyard could update then.
+- **Update all** (when both rows have one) updates the firmware first. The new firmware names
+  its own Mainsail, which the mainsail row then offers.
+
 ## The update page (`/halyard/`)
 
-This updates Halyard from any browser, with no bash, curl or Docker. Mainsail's sidebar links
-to it as **Halyard updates** (Halyard serves a read-only `config/.theme/navi.json`, Mainsail's
-file for custom sidebar links), and so does the front page.
+The fallback for what the Update Manager can't do: install a file from the computer (offline,
+another version, a stock Mainsail), go back to the previous Mainsail, and update Halyard when
+Mainsail is missing or broken. It is built into the firmware, works from any browser with no
+bash, curl or Docker, and is reached at `/halyard/` and from the front page Halyard shows
+while the card has no Mainsail. Mainsail doesn't link to it, so its updates stay in the Update
+Manager (until 0.5.0 a `navi.json` put it in Mainsail's sidebar; Halyard removes that file).
 
 - **Firmware:** choose a `firmware.bin`. The page checks that it is an ESP32-S3 app image
   and refuses a merged USB-flash image (it starts with the bootloader) or another chip's
@@ -221,10 +246,10 @@ takes `HALYARD_VERSION`; without one it is `<base>-g<commit>`), and writes `dist
 | File | What it is for |
 |---|---|
 | `release/halyard-<ver>.bin` | The merged image for a first install: bootloader, partition table, `boot_app0` and the app, from `0x0` (`esptool merge-bin`). The same bytes as `./run.sh flash`. |
-| `release/firmware.bin` | Updates: the update page, `run.sh ota`, later the Update Manager. |
+| `release/firmware.bin` | Updates: the Update Manager, the update page, `run.sh ota`. |
 | `release/mainsail-<version>.zip` | The Mainsail the firmware fetches from `[updates] source`. |
 | `release/halyard-card-<ver>.zip` | The card's contents (`tools/make_card.py`). |
-| `release/SHA256SUMS` | Checksums of the above. |
+| `release/SHA256SUMS` | Checksums of the above. The Update Manager reads the version from it (`halyard-<ver>.bin`) and checks `firmware.bin` against it. |
 | `flasher/` | `index.html` (from `flasher/`), `manifest.json` and the merged image, for ESP Web Tools 10.4.0. |
 
 `./run.sh flasher` serves `dist/` on `http://localhost:8000/`. Web Serial needs https or

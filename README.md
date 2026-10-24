@@ -107,11 +107,13 @@ installed as Flatpaks can't resolve `.local` names.
 - **Settings** are in `halyard.cfg`. Edit it in Mainsail (**Machine**, `halyard.cfg`, then
 **SAVE &amp; RESTART**) or on a computer with the card in a reader. The WiFi password shows as
 `********`; saving with the stars keeps it.
-- **Updates:** Mainsail's Update Manager (Machine page) updates Halyard's Mainsail. Firmware
-updates go through Halyard's update page, `http://<halyard>/halyard/` (linked from
-Mainsail's sidebar): drop a `firmware.bin` from a release on it. It boots the new firmware
-on trial and goes back to the old one if it fails. An update during a print is fine, since
-the printer prints from its own card.
+- **Updates:** Mainsail's Update Manager (Machine page) has two rows: **halyard** updates the
+firmware to the latest release, and **mainsail** updates Halyard's Mainsail to the one that
+firmware ships with. Halyard boots new firmware on trial and goes back to the old one if it
+fails. An update during a print is fine, since the printer prints from its own card
+(Mainsail's own panel waits for the print to end). As a fallback, Halyard's built-in update
+page, `http://<halyard>/halyard/`, takes a `firmware.bin` or a `mainsail.zip` from your
+computer, works without Mainsail, and can go back to the previous Mainsail.
 - **Access:** anyone on your home network (the private address ranges) can use Halyard, as
 with MainsailOS. `[access]` in `halyard.cfg` narrows the ranges and holds the API key for
 everyone else; enter it in the slicer's "API Key" field.
