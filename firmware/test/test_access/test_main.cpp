@@ -479,15 +479,27 @@ void test_zip_to_tar_refusals() {
   TEST_ASSERT_TRUE(err.find("cut off") != std::string::npos);
 }
 
-// Halyard's Mainsail (D13), when ./run.sh has built it (../mainsail): every file gunzips (CRC
-// checked), and the installed UI has its 193 files, halyard-config.html among them.
-void test_zip_to_tar_real_mainsail() {
+// The fork's zip from ../mainsail/dist, or "" when ./run.sh hasn't built it. The test asks
+// have_real_mainsail_zip() first, so that no string is alive when TEST_IGNORE jumps out of it
+// (a longjmp): ASan counts those as leaks and fails the whole suite.
+std::string real_mainsail_zip(std::string& version) {
   std::string here = __FILE__;
   std::string top = here.substr(0, here.rfind('/')) + "/../../../";
   auto line = [](std::string s) { return s.substr(0, s.find_first_of("\r\n")); };
-  std::string version = line(slurp(top + "mainsail/UPSTREAM")) + "-halyard." + line(slurp(top + "mainsail/REVISION"));
-  std::string zip = slurp(top + "mainsail/dist/mainsail-" + version + ".zip");
-  if (zip.empty()) TEST_IGNORE_MESSAGE("no mainsail/dist zip (./run.sh test builds it)");
+  version = line(slurp(top + "mainsail/UPSTREAM")) + "-halyard." + line(slurp(top + "mainsail/REVISION"));
+  return slurp(top + "mainsail/dist/mainsail-" + version + ".zip");
+}
+
+// Halyard's Mainsail (D13), when ./run.sh has built it (../mainsail): every file gunzips (CRC
+// checked), and the installed UI has its 193 files, halyard-config.html among them.
+bool have_real_mainsail_zip() {
+  std::string version;
+  return !real_mainsail_zip(version).empty();
+}
+
+void test_zip_to_tar_real_mainsail() {
+  if (!have_real_mainsail_zip()) TEST_IGNORE_MESSAGE("no mainsail/dist zip (./run.sh test builds it)");
+  std::string version, zip = real_mainsail_zip(version);
   std::string err, tar = zip_to_tar(zip, 4096, &err);
   TEST_ASSERT_FALSE_MESSAGE(tar.empty(), err.c_str());
   WebUi ui(g_root + "/www");

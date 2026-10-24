@@ -70,9 +70,10 @@ webui_tar() {
 }
 
 run_tests() {
+  mainsail_release  # test_zip_to_tar_real_mainsail and the Node test use the fork's zip
   $PIO test -d firmware -e native
   # The update page's zip, gzip and tar code, in Node (it has the browser's streams).
-  if command -v node >/dev/null; then mainsail_release
+  if command -v node >/dev/null; then
     node firmware/test/js/test_update_page.mjs "$MAINSAIL_ZIP" "$BUILD"
   else echo "node not found: the update page's test was skipped"; fi
 }
