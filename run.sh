@@ -69,9 +69,14 @@ webui_tar() {
   echo "Mainsail $MAINSAIL_VERSION: $(find "$dir" -type f | wc -l) files, $(du -sh "$dir" | cut -f1) -> $(du -sh webui/mainsail.tar | cut -f1) as sent"
 }
 
+# Arguments are a command to run between the host tests and the Node test: release passes the
+# firmware build, so that the Node test checks the firmware.bin it ships. Not before the host
+# tests: on a fresh machine (CI), their first run installs the native platform, and PlatformIO
+# then empties .pio/build, the GEEK's build too.
 run_tests() {
   mainsail_release  # test_zip_to_tar_real_mainsail and the Node test use the fork's zip
   $PIO test -d firmware -e native
+  "$@"
   # The update page's zip, gzip and tar code, in Node (it has the browser's streams).
   if command -v node >/dev/null; then
     node firmware/test/js/test_update_page.mjs "$MAINSAIL_ZIP" "$BUILD"
@@ -84,8 +89,7 @@ release() {
   local ver=$1 rel=dist/release fl=dist/flasher
   [[ "$ver" =~ ^[A-Za-z0-9][A-Za-z0-9.+-]*$ ]] || { echo "bad version: $ver" >&2; exit 2; }
   [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "note: uncommitted changes go into this build" >&2
-  HALYARD_VERSION=$ver $PIO run -d firmware -e geek
-  run_tests  # after the build: the update page's test checks this firmware.bin
+  run_tests env HALYARD_VERSION="$ver" $PIO run -d firmware -e geek
   serial_image; mainsail_release
   rm -rf dist && mkdir -p "$rel" "$fl"
   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/$BUILD:/fw:ro" -v "$BOOT_APP0:/boot_app0.bin:ro" \
