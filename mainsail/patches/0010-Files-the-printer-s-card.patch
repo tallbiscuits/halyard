@@ -1,0 +1,593 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Wed, 30 Sep 2026 22:45:56 +0200
+Subject: [PATCH 10/14] Files: the printer's card
+
+Halyard copies each file to the printer's own SD card before the printer prints it. A new
+panel under G-Code Files shows that card as Halyard last listed it (printer.card.list): the
+8.3 names, the long names where the printer reports them, and which file in Halyard's
+library each one came from, with a warning when the card's copy is not the one Halyard
+wrote. Its other columns are G-Code Files' own, chosen and ordered by that panel's settings
+and drawn by its cells and thumbnail: the card's size and date, and for a current copy the
+metadata of the library file it came from (the printer can't send a file back, so other
+files show "--"). A file can be printed as it is (M23, M24) or deleted (M30), after a
+confirmation, and a selection deleted one file after another. A file the printer can't open
+over serial (one in a folder, on Marlin 2.1.2 and older) comes with "locked": its row can't
+be selected, printed or deleted, and a lock says why. Halyard lists the card only while the
+printer is idle, so during a print the panel shows the last listing and says why, and its
+buttons are off. It lists again when the halyard object's card_version changes, and on the
+refresh button.
+
+G-Code Files' context menu gets "Copy to the printer's card", a hand-off without a print
+(printer.card.copy), whose progress shows in the status panel. Halyard's methods are typed
+in types/moonraker/HalyardRPC.ts. Everything here shows only when the printer objects
+include halyard.
+
+diff --git a/src/components/panels/Gcodefiles/GcodefilesPanelTableRowFile.vue b/src/components/panels/Gcodefiles/GcodefilesPanelTableRowFile.vue
+index 68791e9..d0f4001 100644
+--- a/src/components/panels/Gcodefiles/GcodefilesPanelTableRowFile.vue
++++ b/src/components/panels/Gcodefiles/GcodefilesPanelTableRowFile.vue
+@@ -57,6 +57,15 @@
+                     <v-icon class="mr-1">{{ mdiPlay }}</v-icon>
+                     {{ $t('Files.PrintStart') }}
+                 </v-list-item>
++                <v-list-item
++                    v-if="isGcodeFile && isHalyard"
++                    :disabled="
++                        !klipperReadyForGui || handoffActive || ['error', 'printing', 'paused'].includes(printer_state)
++                    "
++                    @click="copyToPrinterCard">
++                    <v-icon class="mr-1">{{ mdiSd }}</v-icon>
++                    {{ $t('Files.CopyToPrinterCard') }}
++                </v-list-item>
+                 <v-list-item
+                     v-if="moonrakerComponents.includes('job_queue')"
+                     :disabled="!isGcodeFile"
+@@ -138,6 +147,7 @@ import {
+     mdiPlay,
+     mdiPlaylistPlus,
+     mdiRenameBox,
++    mdiSd,
+     mdiVideo3d,
+ } from '@mdi/js'
+ import ControlMixin from '@/components/mixins/control'
+@@ -173,6 +183,7 @@ export default class GcodefilesPanelTableRowFile extends Mixins(BaseMixin, Contr
+     mdiPlay = mdiPlay
+     mdiPlaylistPlus = mdiPlaylistPlus
+     mdiRenameBox = mdiRenameBox
++    mdiSd = mdiSd
+     mdiVideo3d = mdiVideo3d
+ 
+     showContextMenu = false
+@@ -195,6 +206,19 @@ export default class GcodefilesPanelTableRowFile extends Mixins(BaseMixin, Contr
+         return validGcodeExtensions.includes(format)
+     }
+ 
++    // Halyard: copying a file onto the printer's own card, without printing it.
++    get isHalyard() {
++        return 'halyard' in this.$store.state.printer
++    }
++
++    get handoffActive() {
++        return (this.$store.state.printer.halyard?.handoff?.state ?? 'idle') !== 'idle'
++    }
++
++    copyToPrinterCard() {
++        this.$socket.emit('printer.card.copy', { filename: 'gcodes' + this.currentPath + '/' + this.item.filename })
++    }
++
+     get printStatusTextColor() {
+         switch (this.item.last_status) {
+             case 'in_progress':
+diff --git a/src/components/panels/PrinterCardPanel.vue b/src/components/panels/PrinterCardPanel.vue
+new file mode 100644
+index 0000000..a7b60bb
+--- /dev/null
++++ b/src/components/panels/PrinterCardPanel.vue
+@@ -0,0 +1,361 @@
++<template>
++    <panel
++        v-if="isHalyard"
++        :title="$t('Panels.PrinterCardPanel.Headline')"
++        :icon="mdiSd"
++        :collapsible="true"
++        :loading="loading"
++        card-class="printer-card-panel">
++        <template #buttons>
++            <v-btn v-if="selectedNames.length" icon tile :disabled="!canAct" @click="askDeleteSelected">
++                <v-tooltip top>
++                    <template #activator="{ on, attrs }">
++                        <v-icon color="error" v-bind="attrs" v-on="on">{{ mdiDelete }}</v-icon>
++                    </template>
++                    <span>{{ $t('Panels.PrinterCardPanel.DeleteSelected', { count: selectedNames.length }) }}</span>
++                </v-tooltip>
++            </v-btn>
++            <v-btn icon tile :disabled="!klipperReadyForGui" :loading="loading" @click="refresh">
++                <v-tooltip top>
++                    <template #activator="{ on, attrs }">
++                        <v-icon v-bind="attrs" v-on="on">{{ mdiRefresh }}</v-icon>
++                    </template>
++                    <span>{{ $t('Panels.PrinterCardPanel.Refresh') }}</span>
++                </v-tooltip>
++            </v-btn>
++        </template>
++        <v-card-text v-if="notice" class="pb-0">
++            <v-alert dense text :type="listing.error ? 'warning' : 'info'" class="mb-0">{{ notice }}</v-alert>
++        </v-card-text>
++        <v-card-text v-if="listing.listed && !listing.files.length" class="text-center text--disabled">
++            {{ $t('Panels.PrinterCardPanel.Empty') }}
++        </v-card-text>
++        <v-simple-table v-if="listing.files.length" class="printer-card-panel__table">
++            <thead>
++                <tr>
++                    <th class="file-list__select-td pr-0">
++                        <v-simple-checkbox
++                            v-ripple
++                            :value="allSelected"
++                            :indeterminate="selectedNames.length > 0 && !allSelected"
++                            :disabled="!selectable.length"
++                            class="pa-0 mr-0"
++                            @click.stop="selectAll(!allSelected)" />
++                    </th>
++                    <th class="px-0" style="width: 32px" />
++                    <th>{{ $t('Panels.PrinterCardPanel.Name') }}</th>
++                    <th class="text-no-wrap">{{ $t('Panels.PrinterCardPanel.FromHalyard') }}</th>
++                    <th v-for="col in tableColumns" :key="col.value" class="text-no-wrap">{{ col.text }}</th>
++                    <th />
++                </tr>
++            </thead>
++            <tbody>
++                <tr v-for="row in rows" :key="row.file.name">
++                    <td class="file-list__select-td pr-0">
++                        <v-simple-checkbox
++                            v-ripple
++                            :value="selectedNames.includes(row.file.name)"
++                            :disabled="!!row.file.locked"
++                            class="pa-0 mr-0"
++                            @click.stop="toggle(row.file.name)" />
++                    </td>
++                    <td class="px-0 text-center" style="width: 32px">
++                        <gcodefiles-thumbnail :item="row.item" />
++                    </td>
++                    <td>
++                        <div class="text-no-wrap">
++                            <v-icon v-if="row.file.printing" small color="primary" class="mr-1">
++                                {{ mdiPrinter3d }}
++                            </v-icon>
++                            {{ row.file.name }}
++                        </div>
++                        <div v-if="row.file.long_name" class="text-caption text--disabled">
++                            {{ row.file.long_name }}
++                        </div>
++                    </td>
++                    <td class="text-no-wrap">
++                        <template v-if="row.file.library">
++                            {{ row.file.library }}
++                            <v-tooltip v-if="!row.file.current" top>
++                                <template #activator="{ on, attrs }">
++                                    <v-icon small color="warning" v-bind="attrs" v-on="on">
++                                        {{ mdiAlertOutline }}
++                                    </v-icon>
++                                </template>
++                                <span>{{ $t('Panels.PrinterCardPanel.NotCurrent') }}</span>
++                            </v-tooltip>
++                        </template>
++                        <span v-else class="text--disabled">{{ $t('Panels.PrinterCardPanel.NotFromHalyard') }}</span>
++                    </td>
++                    <!-- The columns G-Code Files shows, in its order, with its cells -->
++                    <template v-for="col in tableColumns">
++                        <gcodefiles-panel-table-row-file-metadata-slicer
++                            v-if="col.value === 'slicer'"
++                            :key="col.value"
++                            :item="row.item" />
++                        <gcodefiles-panel-table-row-file-metadata-filaments
++                            v-else-if="col.value === 'filaments'"
++                            :key="col.value"
++                            :item="row.item" />
++                        <gcodefiles-panel-table-row-file-metadata-filament-strings
++                            v-else-if="['filament_name', 'filament_type'].includes(col.value)"
++                            :key="col.value"
++                            :item="row.item"
++                            :column="col.value" />
++                        <gcodefiles-panel-table-row-file-metadata v-else :key="col.value" :col="col" :item="row.item" />
++                    </template>
++                    <td class="text-right text-no-wrap">
++                        <v-tooltip v-if="row.file.locked" top>
++                            <template #activator="{ on, attrs }">
++                                <v-icon small class="mr-2" v-bind="attrs" v-on="on">{{ mdiLockOutline }}</v-icon>
++                            </template>
++                            <span>{{ row.file.locked }}</span>
++                        </v-tooltip>
++                        <v-btn icon small :disabled="!canAct || !!row.file.locked" @click="askPrint(row.file)">
++                            <v-icon small>{{ mdiPlay }}</v-icon>
++                        </v-btn>
++                        <v-btn icon small :disabled="!canAct || !!row.file.locked" @click="askDelete(row.file)">
++                            <v-icon small color="error">{{ mdiDelete }}</v-icon>
++                        </v-btn>
++                    </td>
++                </tr>
++            </tbody>
++        </v-simple-table>
++        <confirmation-dialog
++            v-model="showPrintDialog"
++            :icon="mdiPlay"
++            :title="$t('Panels.PrinterCardPanel.PrintTitle')"
++            :text="$t('Panels.PrinterCardPanel.PrintText', { name: selected })"
++            :action-button-text="$t('Panels.PrinterCardPanel.Print')"
++            :cancel-button-text="$t('Buttons.Cancel')"
++            action-button-color="primary"
++            @action="print" />
++        <confirmation-dialog
++            v-model="showDeleteDialog"
++            :icon="mdiDelete"
++            :title="$t('Panels.PrinterCardPanel.DeleteTitle')"
++            :text="$t('Panels.PrinterCardPanel.DeleteText', { name: selected })"
++            :action-button-text="$t('Buttons.Delete')"
++            :cancel-button-text="$t('Buttons.Cancel')"
++            action-button-color="error"
++            @action="remove" />
++        <confirmation-dialog
++            v-model="showDeleteSelectedDialog"
++            :icon="mdiDelete"
++            :title="$t('Panels.PrinterCardPanel.DeleteTitle')"
++            :text="$t('Panels.PrinterCardPanel.DeleteSelectedText', { count: selectedNames.length })"
++            :action-button-text="$t('Buttons.Delete')"
++            :cancel-button-text="$t('Buttons.Cancel')"
++            action-button-color="error"
++            @action="removeSelected" />
++    </panel>
++</template>
++
++<script lang="ts">
++import { Component, Mixins, Watch } from 'vue-property-decorator'
++import BaseMixin from '@/components/mixins/base'
++import GcodefilesMixin from '@/components/mixins/gcodefiles'
++import Panel from '@/components/ui/Panel.vue'
++import ConfirmationDialog from '@/components/dialogs/ConfirmationDialog.vue'
++import GcodefilesThumbnail from '@/components/panels/Gcodefiles/GcodefilesThumbnail.vue'
++import GcodefilesPanelTableRowFileMetadata from '@/components/panels/Gcodefiles/GcodefilesPanelTableRowFileMetadata.vue'
++import GcodefilesPanelTableRowFileMetadataFilaments from '@/components/panels/Gcodefiles/GcodefilesPanelTableRowFileMetadataFilaments.vue'
++import GcodefilesPanelTableRowFileMetadataFilamentStrings from '@/components/panels/Gcodefiles/GcodefilesPanelTableRowFileMetadataFilamentStrings.vue'
++import GcodefilesPanelTableRowFileMetadataSlicer from '@/components/panels/Gcodefiles/GcodefilesPanelTableRowFileMetadataSlicer.vue'
++import { FileStateGcodefile } from '@/store/files/types'
++import type { PrinterCardFile, PrinterCardListing } from '@/types/moonraker/HalyardRPC'
++import { mdiAlertOutline, mdiDelete, mdiLockOutline, mdiPlay, mdiPrinter3d, mdiRefresh, mdiSd } from '@mdi/js'
++
++// Halyard: the printer's own SD card, where Halyard copies each file before the printer
++// prints it. Halyard lists it (M20) only while the printer is idle; during a print this shows
++// the last listing. Printing a file here starts it as it is on the card, with nothing copied.
++// The columns are G-Code Files' own (its settings choose and order them). The printer can't
++// send a file back, so a file's metadata is known only for a copy Halyard wrote from its
++// library; other files show "--".
++@Component({
++    components: {
++        ConfirmationDialog,
++        GcodefilesPanelTableRowFileMetadata,
++        GcodefilesPanelTableRowFileMetadataFilaments,
++        GcodefilesPanelTableRowFileMetadataFilamentStrings,
++        GcodefilesPanelTableRowFileMetadataSlicer,
++        GcodefilesThumbnail,
++        Panel,
++    },
++})
++export default class PrinterCardPanel extends Mixins(BaseMixin, GcodefilesMixin) {
++    mdiAlertOutline = mdiAlertOutline
++    mdiDelete = mdiDelete
++    mdiLockOutline = mdiLockOutline
++    mdiPlay = mdiPlay
++    mdiPrinter3d = mdiPrinter3d
++    mdiRefresh = mdiRefresh
++    mdiSd = mdiSd
++
++    listing: PrinterCardListing = { files: [], listed: false, version: 0 }
++    loading = false
++    selected = ''
++    selectedNames: string[] = []
++    showPrintDialog = false
++    showDeleteDialog = false
++    showDeleteSelectedDialog = false
++
++    get isHalyard() {
++        return 'halyard' in this.$store.state.printer
++    }
++
++    get cardVersion(): number | null {
++        return this.$store.state.printer.halyard?.card_version ?? null
++    }
++
++    get handoffActive() {
++        return (this.$store.state.printer.halyard?.handoff?.state ?? 'idle') !== 'idle'
++    }
++
++    get canAct() {
++        return this.klipperReadyForGui && !this.handoffActive && !['printing', 'paused'].includes(this.printer_state)
++    }
++
++    // Each file as G-Code Files' cells and thumbnail take it: the card's name, size and date,
++    // and the metadata of the library file it was copied from. The thumbnails' paths are
++    // relative to that file, so full_filename is the library's name.
++    get rows(): { file: PrinterCardFile; item: FileStateGcodefile }[] {
++        return this.listing.files.map((file) => ({
++            file,
++            item: {
++                ...(file.metadata ?? {}),
++                filename: file.name,
++                full_filename: file.library ?? file.name,
++                isDirectory: false,
++                modified: file.modified ? new Date(file.modified.replace(' ', 'T')) : null,
++                permissions: 'rw',
++                size: file.size,
++                preheat_gcode: null,
++                count_printed: 0,
++                last_end_time: null,
++                last_filament_used: null,
++                last_print_duration: null,
++                last_status: null,
++                last_start_time: null,
++                last_total_duration: null,
++            } as FileStateGcodefile,
++        }))
++    }
++
++    // What can be selected: the printer can't open a locked file (Halyard says why).
++    get selectable() {
++        return this.listing.files.filter((file) => !file.locked).map((file) => file.name)
++    }
++
++    get allSelected() {
++        return this.selectable.length > 0 && this.selectedNames.length === this.selectable.length
++    }
++
++    get notice() {
++        if (this.listing.error) return this.listing.error
++        if (this.listing.stale && this.listing.listed)
++            return this.$t('Panels.PrinterCardPanel.Stale', { reason: this.listing.stale })
++        if (this.listing.stale) return this.$t('Panels.PrinterCardPanel.NotListed', { reason: this.listing.stale })
++
++        return null
++    }
++
++    async load(refresh: boolean) {
++        if (!this.klipperReadyForGui) return
++
++        this.loading = true
++        try {
++            this.listing = await this.$socket.emitAndWait('printer.card.list', { refresh })
++        } finally {
++            this.loading = false
++        }
++    }
++
++    refresh() {
++        this.load(true)
++    }
++
++    toggle(name: string) {
++        if (this.selectedNames.includes(name)) this.selectedNames = this.selectedNames.filter((n) => n !== name)
++        else this.selectedNames = [...this.selectedNames, name]
++    }
++
++    selectAll(all: boolean) {
++        this.selectedNames = all ? [...this.selectable] : []
++    }
++
++    askPrint(file: PrinterCardFile) {
++        this.selected = file.name
++        this.showPrintDialog = true
++    }
++
++    askDelete(file: PrinterCardFile) {
++        this.selected = file.name
++        this.showDeleteDialog = true
++    }
++
++    askDeleteSelected() {
++        this.showDeleteSelectedDialog = true
++    }
++
++    // Refusals come back as "!!" console lines, which Mainsail shows as messages here.
++    print() {
++        this.$socket.emit('printer.card.print', { name: this.selected })
++    }
++
++    remove() {
++        this.$socket.emit('printer.card.delete', { name: this.selected })
++    }
++
++    // One M30 after another; a refusal (the printer started printing, say) stops the rest.
++    async removeSelected() {
++        const names = [...this.selectedNames]
++        this.selectedNames = []
++        for (const name of names) {
++            try {
++                await this.$socket.emitAndWait('printer.card.delete', { name })
++            } catch {
++                break
++            }
++        }
++    }
++
++    mounted() {
++        this.load(true)
++    }
++
++    // A new listing (after a copy, a delete or a reconnect): fetch it as Halyard has it.
++    @Watch('cardVersion')
++    cardVersionChanged(newVal: number | null) {
++        if (newVal !== null && newVal !== this.listing.version) this.load(false)
++    }
++
++    // A selection keeps only the files the card still holds.
++    @Watch('listing')
++    listingChanged() {
++        this.selectedNames = this.selectedNames.filter((name) => this.selectable.includes(name))
++    }
++
++    // A print starts or ends: the same listing, now marked stale or no longer.
++    @Watch('printer_state')
++    printerStateChanged(newVal: string, oldVal: string) {
++        const printing = (state: string) => ['printing', 'paused'].includes(state)
++        if (printing(newVal) !== printing(oldVal)) this.load(false)
++    }
++
++    @Watch('klipperReadyForGui')
++    klipperReadyForGuiChanged(newVal: boolean) {
++        if (newVal) this.load(false)
++    }
++}
++</script>
++
++<style scoped>
++.printer-card-panel__table td {
++    vertical-align: middle;
++}
++
++.file-list__select-td {
++    width: 24px;
++}
++</style>
+diff --git a/src/locales/en.json b/src/locales/en.json
+index 1fd1107..ad36a29 100644
+--- a/src/locales/en.json
++++ b/src/locales/en.json
+@@ -231,6 +231,7 @@
+         "AllFiles": "All",
+         "BedTemp": "Bed Temp.",
+         "ChamberTemp": "Chamber Temp.",
++        "CopyToPrinterCard": "Copy to the printer's card",
+         "Count": "Count",
+         "Create": "Create",
+         "CreateNewDirectory": "Create new Directory",
+@@ -954,6 +955,24 @@
+             },
+             "Unknown": "Unknown"
+         },
++        "PrinterCardPanel": {
++            "DeleteSelected": "Delete the {count} selected files",
++            "DeleteSelectedText": "Delete the {count} selected files from the printer's card? Halyard's own copies stay.",
++            "DeleteText": "Delete {name} from the printer's card? Halyard's own copy stays.",
++            "DeleteTitle": "Delete from the printer's card",
++            "Empty": "The printer's card has no G-code files.",
++            "FromHalyard": "From Halyard",
++            "Headline": "Printer's card",
++            "Name": "Name",
++            "NotCurrent": "Not the copy Halyard wrote: the copy may have been interrupted. Printing from Halyard's list copies it again.",
++            "NotFromHalyard": "not from Halyard",
++            "NotListed": "Not listed yet: {reason}.",
++            "Print": "Print",
++            "PrintText": "Print {name} as it is on the printer's card?",
++            "PrintTitle": "Print from the printer's card",
++            "Refresh": "List the card again",
++            "Stale": "The last listing: {reason}."
++        },
+         "SpoolmanPanel": {
+             "ActiveSpool": "Active Spool",
+             "ChangeSpool": "Change Spool",
+diff --git a/src/pages/Files.vue b/src/pages/Files.vue
+index bec76b3..a9cc203 100644
+--- a/src/pages/Files.vue
++++ b/src/pages/Files.vue
+@@ -2,6 +2,7 @@
+     <v-row v-if="existGcodesRootDirectory">
+         <v-col :class="showJobQueue ? 'col-12 col-md-8 pt-0 pt-md-3 order-1 order-md-0' : 'col-12'">
+             <gcodefiles-panel></gcodefiles-panel>
++            <printer-card-panel class="mt-6"></printer-card-panel>
+         </v-col>
+         <v-col v-if="showJobQueue" class="col-12 col-md-4 pb-0 pb-sm-3 order-0 order-md-1">
+             <jobqueue-panel></jobqueue-panel>
+@@ -18,10 +19,11 @@ import { Component, Mixins } from 'vue-property-decorator'
+ import BaseMixin from '@/components/mixins/base'
+ import GcodefilesPanel from '@/components/panels/GcodefilesPanel.vue'
+ import JobqueuePanel from '@/components/panels/JobqueuePanel.vue'
++import PrinterCardPanel from '@/components/panels/PrinterCardPanel.vue'
+ import { mdiLockOutline } from '@mdi/js'
+ 
+ @Component({
+-    components: { JobqueuePanel, GcodefilesPanel },
++    components: { JobqueuePanel, GcodefilesPanel, PrinterCardPanel },
+ })
+ export default class PageFiles extends Mixins(BaseMixin) {
+     mdiLockOutline = mdiLockOutline
+diff --git a/src/types/moonraker/HalyardRPC.ts b/src/types/moonraker/HalyardRPC.ts
+new file mode 100644
+index 0000000..45fd58a
+--- /dev/null
++++ b/src/types/moonraker/HalyardRPC.ts
+@@ -0,0 +1,59 @@
++/**
++ * Halyard RPC Interface
++ *
++ * Halyard's own methods, beside the Moonraker subset it serves: the printer's own SD card,
++ * which Halyard lists with M20 while the printer is idle. Not part of Moonraker.
++ */
++
++import type { FileStateFile } from '@/store/files/types'
++
++/** A file on the printer's card, as M20 lists it */
++export interface PrinterCardFile {
++    /** The 8.3 path the printer knows it by */
++    name: string
++    size: number
++    /** With the printer's LONG_FILENAME_HOST_SUPPORT */
++    long_name?: string
++    /** With M20_TIMESTAMP_SUPPORT: "YYYY-MM-DD HH:MM", in the printer's local time */
++    modified?: string
++    /** The file in Halyard's library it was copied from */
++    library?: string
++    /** Whether the card still holds the copy Halyard wrote */
++    current?: boolean
++    /** The library file's metadata, as server.files.metadata has it, while the copy is current */
++    metadata?: Partial<FileStateFile>
++    /** The printer is printing it */
++    printing: boolean
++    /** Why the printer can't print or delete it over serial (a folder, on Marlin 2.1.2 and older) */
++    locked?: string
++}
++
++export interface PrinterCardListing {
++    files: PrinterCardFile[]
++    /** Listed at least once since the printer connected */
++    listed: boolean
++    listed_at?: number
++    /** Changes with every listing; the halyard printer object carries it too */
++    version: number
++    /** Why the last listing failed */
++    error?: string
++    /** Why this is the last listing and not a new one (the printer is printing) */
++    stale?: string
++}
++
++export interface HalyardRPC {
++    /**
++     * The printer's card: listed again unless refresh is false, or the last listing, with
++     * `stale` saying why, while the printer can't be asked.
++     */
++    'printer.card.list': (params: { refresh?: boolean }) => Promise<PrinterCardListing>
++
++    /** Prints a file on the printer's card as it is (M23, M24); only while idle */
++    'printer.card.print': (params: { name: string }) => Promise<string>
++
++    /** Deletes a file on the printer's card (M30); only while idle */
++    'printer.card.delete': (params: { name: string }) => Promise<string>
++
++    /** Copies a file from Halyard's library onto the printer's card, without printing it */
++    'printer.card.copy': (params: { filename: string }) => Promise<string>
++}
+diff --git a/src/types/moonraker/index.ts b/src/types/moonraker/index.ts
+index e4b3e67..d19b2fe 100644
+--- a/src/types/moonraker/index.ts
++++ b/src/types/moonraker/index.ts
+@@ -29,11 +29,12 @@
+ import type { ServerRPC } from './ServerRPC'
+ import type { PrinterRPC } from './PrinterRPC'
+ import type { MachineRPC } from './MachineRPC'
++import type { HalyardRPC } from './HalyardRPC'
+ 
+ /**
+  * Combined Moonraker RPC Interface containing all method categories.
+  */
+-export interface MoonrakerRPCInterface extends ServerRPC, PrinterRPC, MachineRPC {}
++export interface MoonrakerRPCInterface extends ServerRPC, PrinterRPC, MachineRPC, HalyardRPC {}
+ 
+ /**
+  * Union type of all available RPC method names.

@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Sat, 10 Oct 2026 09:34:04 +0200
+Subject: [PATCH 14/14] Versions: Halyard in Klipper's place, by name
+
+printer.info's software_version is Halyard's own version, so Klipper's minimum version is not checked against it, the Host row shows it whole (not cut to Klipper's four parts), and the About tooltip names the app instead of showing Klipper's logo.
+
+diff --git a/src/components/dialogs/AboutDialog.vue b/src/components/dialogs/AboutDialog.vue
+index ff69e1a..da48471 100644
+--- a/src/components/dialogs/AboutDialog.vue
++++ b/src/components/dialogs/AboutDialog.vue
+@@ -12,8 +12,15 @@
+                 <v-icon small class="moonraker-logo">{{ mdiMoonWaningCrescent }}</v-icon>
+             </div>
+             <div>{{ moonrakerVersion }}</div>
+-            <div><img height="12" src="/img/klipper.svg" class="klipper-logo" alt="klipper-logo" /></div>
+-            <div>{{ klipperVersion }}</div>
++            <template v-if="klipperAppName === 'Klipper'">
++                <div><img height="12" src="/img/klipper.svg" class="klipper-logo" alt="klipper-logo" /></div>
++                <div>{{ klipperVersion }}</div>
++            </template>
++            <!-- Halyard: another app in Klipper's place is named, not shown with Klipper's logo -->
++            <template v-else>
++                <div></div>
++                <div>{{ klipperAppName }} {{ klipperVersion }}</div>
++            </template>
+         </v-container>
+     </v-tooltip>
+ </template>
+diff --git a/src/store/getters.ts b/src/store/getters.ts
+index f78d8f1..6ba15cb 100644
+--- a/src/store/getters.ts
++++ b/src/store/getters.ts
+@@ -78,7 +78,11 @@ export const getters: GetterTree<RootState, RootState> = {
+         const minKlipperVersionRelease = minKlipperVersionSplits[0] ?? ''
+         const minKlipperVersionBuild = parseInt(minKlipperVersionSplits[1] ?? 0)
+ 
++        // Halyard: the minimum is Klipper's; another app's version means nothing against it.
++        const isKlipper = (state.printer?.app_name ?? 'Klipper') === 'Klipper'
++
+         if (
++            isKlipper &&
+             semver.valid(klipperVersionRelease) &&
+             (semver.gt(minKlipperVersionRelease, klipperVersionRelease) ||
+                 (semver.eq(minKlipperVersionRelease, klipperVersionRelease) &&
+diff --git a/src/store/server/getters.ts b/src/store/server/getters.ts
+index e469715..5c81fff 100644
+--- a/src/store/server/getters.ts
++++ b/src/store/server/getters.ts
+@@ -75,7 +75,12 @@ export const getters: GetterTree<ServerState, RootState> = {
+         if ('system_info' in state) {
+             let version: null | string = null
+             if (rootState.printer?.software_version) {
+-                version = rootState.printer?.software_version.split('-').slice(0, 4).join('-')
++                const full: string = rootState.printer?.software_version
++                // Halyard: shortened only in Klipper's form (v0.12.0-123-gabc-dirty-...)
++                version =
++                    (rootState.printer?.app_name ?? 'Klipper') === 'Klipper'
++                        ? full.split('-').slice(0, 4).join('-')
++                        : full
+             }
+ 
+             if (rootState.printer?.app_name) {

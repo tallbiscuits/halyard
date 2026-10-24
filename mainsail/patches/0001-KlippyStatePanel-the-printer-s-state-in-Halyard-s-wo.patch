@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Tue, 29 Sep 2026 22:18:29 +0200
+Subject: [PATCH 01/14] KlippyStatePanel: the printer's state in Halyard's
+ words
+
+Halyard is not Klipper, so "Klipper reports: STARTUP" misleads. The title now says what is
+happening ("Connecting to the printer", "The printer has halted"); the detail under it is
+Halyard's own state_message. The disconnected view no longer tells the user to check
+moonraker.conf's klippy_uds_address, which Halyard doesn't have.
+
+diff --git a/src/components/panels/KlippyStatePanel.vue b/src/components/panels/KlippyStatePanel.vue
+index fc7c291..9f0fe1c 100644
+--- a/src/components/panels/KlippyStatePanel.vue
++++ b/src/components/panels/KlippyStatePanel.vue
+@@ -75,8 +75,6 @@
+                 {{ serviceReportsMoonraker }}
+             </p>
+             <connection-status :moonraker="true" :klipper="false" />
+-            <p class="mt-2 mb-0 text-center">{{ $t('Panels.KlippyStatePanel.MoonrakerCannotConnect') }}</p>
+-            <p class="mb-0 text-center">{{ $t('Panels.KlippyStatePanel.CheckKlippyAndUdsAddress') }}</p>
+         </v-alert>
+     </div>
+ </template>
+@@ -130,16 +128,23 @@ export default class KlippyStatePanel extends Mixins(BaseMixin) {
+         return [this.messageType.color + '--text', 'my-1', 'w-100']
+     }
+ 
++    // Halyard: the printer's state in Halyard's words, not "Klipper reports: STARTUP". The
++    // detail below it is Halyard's own state_message.
+     get serviceReportsKlipper() {
+-        return `${this.$t('Panels.KlippyStatePanel.ServiceReports', {
+-            service: 'Klipper',
+-        })}: ${this.klipperState.toUpperCase()}`
++        switch (this.klipperState) {
++            case 'startup':
++                return this.$t('Panels.KlippyStatePanel.PrinterStartup')
++            case 'shutdown':
++                return this.$t('Panels.KlippyStatePanel.PrinterHalted')
++            case 'error':
++                return this.$t('Panels.KlippyStatePanel.PrinterError')
++            default:
++                return this.$t('Panels.KlippyStatePanel.PrinterState', { state: this.klipperState })
++        }
+     }
+ 
+     get serviceReportsMoonraker() {
+-        return `${this.$t('Panels.KlippyStatePanel.ServiceReports', {
+-            service: 'Moonraker',
+-        })}: ${this.klipperState.toUpperCase()}`
++        return this.$t('Panels.KlippyStatePanel.PrinterDisconnected')
+     }
+ 
+     restart() {
+diff --git a/src/locales/en.json b/src/locales/en.json
+index 538ceb4..da51b19 100644
+--- a/src/locales/en.json
++++ b/src/locales/en.json
+@@ -729,6 +729,11 @@
+             "PowerOn": "Power on",
+             "PrinterSwitchedOff": "Printer is powered off",
+             "PrinterSwitchedOffDescription": "The printer is currently powered off and Klipper cannot connect. To power on the printer, click the button below:",
++            "PrinterDisconnected": "Halyard can't reach the printer",
++            "PrinterError": "The printer reports an error",
++            "PrinterHalted": "The printer has halted",
++            "PrinterStartup": "Connecting to the printer",
++            "PrinterState": "Printer: {state}",
+             "Restart": "Restart",
+             "ServiceReports": "{service} reports"
+         },

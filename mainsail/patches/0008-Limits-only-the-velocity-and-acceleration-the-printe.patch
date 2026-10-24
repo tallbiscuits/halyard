@@ -1,0 +1,99 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Wed, 30 Sep 2026 07:55:20 +0200
+Subject: [PATCH 08/14] Limits: only the velocity and acceleration the printer
+ has
+
+Halyard translates SET_VELOCITY_LIMIT into Marlin's maximum feedrate (M203) and
+acceleration (M204), read from the printer. Marlin has no square corner velocity (its
+junction deviation is a distance that depends on the acceleration), accel_to_decel or
+minimum cruise ratio, so Halyard leaves them out of the toolhead and their fields are
+hidden, with velocity and acceleration side by side. A Marlin that doesn't report its limits
+has no max_velocity, and then the panel is hidden instead of showing made-up values.
+
+diff --git a/src/components/panels/MachineSettingsPanel.vue b/src/components/panels/MachineSettingsPanel.vue
+index 73319a3..c64263d 100644
+--- a/src/components/panels/MachineSettingsPanel.vue
++++ b/src/components/panels/MachineSettingsPanel.vue
+@@ -1,6 +1,6 @@
+ <template>
+     <panel
+-        v-if="klipperReadyForGui"
++        v-if="klipperReadyForGui && hasLimits"
+         :icon="mdiEngine"
+         :title="$t('Panels.MachineSettingsPanel.Headline')"
+         :collapsible="true"
+@@ -29,7 +29,9 @@
+                                 unit="mm/s"
+                                 @submit="sendCmd" />
+                         </v-col>
+-                        <v-col :class="{ 'col-12': el.is.small, 'col-6': el.is.medium }">
++                        <v-col
++                            v-if="squareCornerVelocity !== null"
++                            :class="{ 'col-12': el.is.small, 'col-6': el.is.medium }">
+                             <number-input
+                                 :label="$t('Panels.MachineSettingsPanel.MotionSettings.SquareCornerVelocity')"
+                                 param="SQUARE_CORNER_VELOCITY"
+@@ -44,8 +46,6 @@
+                                 unit="mm/s"
+                                 @submit="sendCmd" />
+                         </v-col>
+-                    </v-row>
+-                    <v-row>
+                         <v-col :class="{ 'col-12': el.is.small, 'col-6': el.is.medium }">
+                             <number-input
+                                 :label="$t('Panels.MachineSettingsPanel.MotionSettings.Acceleration')"
+@@ -62,7 +62,9 @@
+                                 unit="mm/s²"
+                                 @submit="sendCmd" />
+                         </v-col>
+-                        <v-col :class="{ 'col-12': el.is.small, 'col-6': el.is.medium }">
++                        <v-col
++                            v-if="accelToDecel !== null || minimumCruiseRatio !== null"
++                            :class="{ 'col-12': el.is.small, 'col-6': el.is.medium }">
+                             <number-input
+                                 v-if="minimumCruiseRatio === null"
+                                 :label="$t('Panels.MachineSettingsPanel.MotionSettings.MaxAccelToDecel')"
+@@ -128,6 +130,12 @@ export default class MachineSettingsPanel extends Mixins(BaseMixin) {
+         return this.$store.state.printer?.configfile?.settings?.printer ?? {}
+     }
+ 
++    // Halyard reports only the limits Marlin has: the panel needs max_velocity, and a field
++    // whose value is not reported is left out.
++    get hasLimits(): boolean {
++        return this.toolhead.max_velocity !== undefined
++    }
++
+     get velocity(): number {
+         return Math.trunc(this.toolhead.max_velocity ?? 300)
+     }
+@@ -136,8 +144,12 @@ export default class MachineSettingsPanel extends Mixins(BaseMixin) {
+         return Math.trunc(this.toolhead.max_accel ?? 3000)
+     }
+ 
+-    get accelToDecel(): number {
+-        return Math.trunc(this.toolhead.max_accel_to_decel ?? this.accel / 2)
++    get accelToDecel(): number | null {
++        const value = this.toolhead.max_accel_to_decel ?? null
++
++        if (value === null) return null
++
++        return Math.trunc(value)
+     }
+ 
+     get minimumCruiseRatio(): number | null {
+@@ -148,8 +160,12 @@ export default class MachineSettingsPanel extends Mixins(BaseMixin) {
+         return Math.round(value * 100)
+     }
+ 
+-    get squareCornerVelocity(): number {
+-        return Math.floor((this.toolhead.square_corner_velocity ?? 8) * 10) / 10
++    get squareCornerVelocity(): number | null {
++        const value = this.toolhead.square_corner_velocity ?? null
++
++        if (value === null) return null
++
++        return Math.floor(value * 10) / 10
+     }
+ 
+     get defaultVelocity(): number {

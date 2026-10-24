@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Tue, 29 Sep 2026 23:29:54 +0200
+Subject: [PATCH 07/14] Toolhead and extruder: only the Z offset and pressure
+ advance the printer has
+
+Halyard translates Mainsail's Z offset control into Marlin's babysteps (M290) and pressure
+advance into Linear Advance (M900 K), but a Marlin may be built without either. Halyard then
+leaves SET_GCODE_OFFSET out of its commands and pressure_advance out of the extruder, and
+these panels are hidden instead of offering buttons that fail. Marlin's Linear Advance has
+no smooth time: without one reported, the advance field takes the row.
+
+diff --git a/src/components/panels/Extruder/PressureAdvanceSettings.vue b/src/components/panels/Extruder/PressureAdvanceSettings.vue
+index 07681e4..3bcd6bd 100644
+--- a/src/components/panels/Extruder/PressureAdvanceSettings.vue
++++ b/src/components/panels/Extruder/PressureAdvanceSettings.vue
+@@ -1,6 +1,6 @@
+ <template>
+     <v-row>
+-        <v-col :class="{ 'col-6': !isSmall, 'col-12': isSmall }">
++        <v-col :class="{ 'col-6': !isSmall && hasSmoothTime, 'col-12': isSmall || !hasSmoothTime }">
+             <number-input
+                 :label="$t('Panels.ExtruderControlPanel.PressureAdvanceSettings.Advance')"
+                 param="ADVANCE"
+@@ -16,7 +16,7 @@
+                 unit="s"
+                 @submit="sendCmd" />
+         </v-col>
+-        <v-col :class="{ 'col-6': !isSmall, 'col-12': isSmall }">
++        <v-col v-if="hasSmoothTime" :class="{ 'col-6': !isSmall, 'col-12': isSmall }">
+             <number-input
+                 :label="$t('Panels.ExtruderControlPanel.PressureAdvanceSettings.SmoothTime')"
+                 param="SMOOTH_TIME"
+@@ -67,6 +67,11 @@ export default class PressureAdvanceSettings extends Mixins(BaseMixin) {
+         return this.roundToThreeDecimals(this.extruderObject?.pressure_advance ?? 0)
+     }
+ 
++    // Marlin's Linear Advance has no smooth time, so Halyard reports none.
++    get hasSmoothTime(): boolean {
++        return this.extruderObject?.smooth_time !== undefined
++    }
++
+     get smoothTime() {
+         return this.roundToThreeDecimals(this.extruderObject?.smooth_time ?? DEFAULT_SMOOTH_TIME)
+     }
+diff --git a/src/components/panels/ExtruderControlPanel.vue b/src/components/panels/ExtruderControlPanel.vue
+index a2d39ff..de09b4a 100644
+--- a/src/components/panels/ExtruderControlPanel.vue
++++ b/src/components/panels/ExtruderControlPanel.vue
+@@ -207,6 +207,10 @@ export default class ExtruderControlPanel extends Mixins(BaseMixin, ControlMixin
+     }
+ 
+     get showPressureAdvance(): boolean {
++        // Halyard reports pressure_advance only when the printer has Linear Advance (M900).
++        const extruder = this.$store.state.printer.toolhead?.extruder ?? 'extruder'
++        if (this.$store.state.printer[extruder]?.pressure_advance === undefined) return false
++
+         return this.$store.state.gui.view.extruder.showPressureAdvance ?? true
+     }
+ 
+diff --git a/src/components/panels/ToolheadControlPanel.vue b/src/components/panels/ToolheadControlPanel.vue
+index dd1cd7e..62fb0d2 100644
+--- a/src/components/panels/ToolheadControlPanel.vue
++++ b/src/components/panels/ToolheadControlPanel.vue
+@@ -179,6 +179,9 @@ export default class ToolheadControlPanel extends Mixins(BaseMixin, ControlMixin
+     }
+ 
+     get showZOffset(): boolean {
++        // Halyard offers SET_GCODE_OFFSET only when the printer can babystep (M290).
++        if (!('SET_GCODE_OFFSET' in (this.$store.state.printer.gcode?.commands ?? {}))) return false
++
+         return this.$store.state.gui.view.toolhead.showZOffset ?? true
+     }
+ 

@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Tue, 29 Sep 2026 22:19:36 +0200
+Subject: [PATCH 05/14] Editor: the config reference is Halyard's
+
+The Config Reference button, the file-structure links and the hover tooltips pointed at
+Klipper's Config_Reference.html. They now open halyard-config.html next to Mainsail's
+index.html, which Halyard's build generates from the card's halyard.cfg.
+
+diff --git a/src/components/mixins/base.ts b/src/components/mixins/base.ts
+index 10569b1..d841904 100644
+--- a/src/components/mixins/base.ts
++++ b/src/components/mixins/base.ts
+@@ -2,7 +2,6 @@ import Vue from 'vue'
+ import Component from 'vue-class-component'
+ import { DateTimeFormatOptions } from 'vue-i18n'
+ import { ServerPowerStateDevice } from '@/store/server/power/types'
+-import { klipperRepos } from '@/store/variables'
+ 
+ @Component
+ export default class BaseMixin extends Vue {
+@@ -48,18 +47,11 @@ export default class BaseMixin extends Vue {
+         return this.$store.state.printer.app_name ?? 'Klipper'
+     }
+ 
++    // Halyard: halyard.cfg is described by Halyard's own page, shipped with this Mainsail and
++    // generated from the card's halyard.cfg, not Klipper's Config_Reference.html. Sections are
++    // anchors (#wifi), as the editor and its tooltips expect.
+     get klipperConfigReference(): string {
+-        const currentLanguage = this.$store.state.gui.general.language ?? 'en'
+-        const klipperRepo = klipperRepos[this.klipperAppName] ?? klipperRepos.Klipper
+-
+-        let url = klipperRepo.url
+-        if (klipperRepo.docsLanguages?.includes(currentLanguage)) {
+-            url += `${currentLanguage}/`
+-        }
+-
+-        url += 'Config_Reference.html'
+-
+-        return url
++        return `${import.meta.env.BASE_URL}halyard-config.html`
+     }
+ 
+     get printerIsPrinting() {

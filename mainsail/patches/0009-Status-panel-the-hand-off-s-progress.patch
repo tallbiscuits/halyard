@@ -1,0 +1,207 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Wed, 30 Sep 2026 22:44:06 +0200
+Subject: [PATCH 09/14] Status panel: the hand-off's progress
+
+Halyard copies a file to the printer's own card before printing it (a hand-off), and can copy
+one without printing. The status panel now shows that copy from the halyard object: the file,
+a progress bar, how much of it has gone, the speed and the time left, and the 8.3 name it gets
+on the printer's card. The steps before and after the copy (checking the card, preheating,
+starting the print) show as a running bar. A stop button ends the copy (printer.print.cancel),
+for a print's copy too, since the panel's own cancel button shows during a print only with
+the "cancel print" setting. display_status repeats the progress for other UIs, so its message
+is hidden while a hand-off runs.
+
+diff --git a/src/components/panels/Status/HalyardHandoff.vue b/src/components/panels/Status/HalyardHandoff.vue
+new file mode 100644
+index 0000000..57bad53
+--- /dev/null
++++ b/src/components/panels/Status/HalyardHandoff.vue
+@@ -0,0 +1,126 @@
++<template>
++    <div v-if="active">
++        <v-container>
++            <v-row class="flex-nowrap">
++                <v-col class="py-2" style="min-width: 0">
++                    <div class="d-flex align-center subtitle-2">
++                        <v-icon class="mr-2" small>{{ mdiSd }}</v-icon>
++                        <span class="text-truncate">{{ title }}</span>
++                        <v-spacer />
++                        <span v-if="uploading" class="ml-2 text-no-wrap">{{ percent }} %</span>
++                    </div>
++                    <v-progress-linear
++                        class="mt-2"
++                        color="primary"
++                        height="6"
++                        rounded
++                        :indeterminate="!uploading"
++                        :value="percent" />
++                    <div class="text-caption text--disabled mt-1">{{ detail }}</div>
++                </v-col>
++                <v-col class="col-auto py-2">
++                    <v-tooltip top>
++                        <template #activator="{ on, attrs }">
++                            <v-btn icon small v-bind="attrs" v-on="on" @click="cancel">
++                                <v-icon small color="error">{{ mdiStop }}</v-icon>
++                            </v-btn>
++                        </template>
++                        <span>{{ $t('Panels.StatusPanel.Handoff.Cancel') }}</span>
++                    </v-tooltip>
++                </v-col>
++            </v-row>
++        </v-container>
++        <v-divider class="mt-0 mb-0" />
++    </div>
++</template>
++
++<script lang="ts">
++import Component from 'vue-class-component'
++import { Mixins } from 'vue-property-decorator'
++import BaseMixin from '@/components/mixins/base'
++import { formatFilesize, formatPrintTime } from '@/plugins/helpers'
++import { mdiSd, mdiStop } from '@mdi/js'
++
++// Halyard: a file on its way from Halyard's card to the printer's (a hand-off), from the
++// halyard object. Its stop button is there for a print's copy too: the panel's own cancel
++// button shows during a print only with the "cancel print" setting.
++interface Handoff {
++    state: string
++    filename?: string
++    printer_name?: string
++    print?: boolean
++    bytes?: number
++    total?: number
++    elapsed?: number
++}
++
++@Component
++export default class StatusPanelHalyardHandoff extends Mixins(BaseMixin) {
++    mdiSd = mdiSd
++    mdiStop = mdiStop
++
++    get handoff(): Handoff {
++        return this.$store.state.printer.halyard?.handoff ?? { state: 'idle' }
++    }
++
++    get active() {
++        return this.handoff.state !== 'idle'
++    }
++
++    get uploading() {
++        return this.handoff.state === 'uploading'
++    }
++
++    get percent() {
++        const total = this.handoff.total ?? 0
++        if (!total) return 0
++
++        return Math.floor(((this.handoff.bytes ?? 0) / total) * 100)
++    }
++
++    get title() {
++        const filename = this.handoff.filename ?? ''
++        if (this.handoff.print) return this.$t('Panels.StatusPanel.Handoff.CopyThenPrint', { filename })
++
++        return this.$t('Panels.StatusPanel.Handoff.Copy', { filename })
++    }
++
++    get detail() {
++        switch (this.handoff.state) {
++            case 'listing':
++                return this.$t('Panels.StatusPanel.Handoff.Listing')
++            case 'preheating':
++                return this.$t('Panels.StatusPanel.Handoff.Preheating')
++            case 'starting':
++                return this.$t('Panels.StatusPanel.Handoff.Starting')
++        }
++
++        const bytes = this.handoff.bytes ?? 0
++        const total = this.handoff.total ?? 0
++        const parts = [
++            this.$t('Panels.StatusPanel.Handoff.Progress', {
++                done: formatFilesize(bytes),
++                total: formatFilesize(total),
++            }),
++        ]
++        const elapsed = this.handoff.elapsed ?? 0
++        // After a few seconds the rate means something.
++        if (elapsed >= 3 && bytes > 0) {
++            const rate = bytes / elapsed
++            parts.push(this.$t('Panels.StatusPanel.Handoff.Speed', { speed: formatFilesize(rate) }))
++            parts.push(
++                this.$t('Panels.StatusPanel.Handoff.Left', {
++                    time: formatPrintTime(Math.max(total - bytes, 0) / rate),
++                })
++            )
++        }
++        if (this.handoff.printer_name) parts.push(this.handoff.printer_name)
++
++        return parts.join(' · ')
++    }
++
++    cancel() {
++        this.$socket.emit('printer.print.cancel', {})
++    }
++}
++</script>
+diff --git a/src/components/panels/StatusPanel.vue b/src/components/panels/StatusPanel.vue
+index 4722b29..6bf7d5f 100644
+--- a/src/components/panels/StatusPanel.vue
++++ b/src/components/panels/StatusPanel.vue
+@@ -88,6 +88,7 @@
+                 </v-container>
+                 <v-divider class="mt-0 mb-0" />
+             </template>
++            <status-panel-halyard-handoff />
+             <v-tabs v-model="activeTab" fixed-tabs>
+                 <v-tab v-if="current_filename" href="#status">
+                     <v-icon>{{ mdiSpeedometer }}</v-icon>
+@@ -144,6 +145,7 @@ import StatusPanelJobqueue from '@/components/panels/Status/Jobqueue.vue'
+ import StatusPanelExcludeObject from '@/components/panels/Status/ExcludeObject.vue'
+ import StatusPanelPrintstatusThumbnail from '@/components/panels/Status/PrintstatusThumbnail.vue'
+ import StatusPanelPauseAtLayerDialog from '@/components/panels/Status/PauseAtLayerDialog.vue'
++import StatusPanelHalyardHandoff from '@/components/panels/Status/HalyardHandoff.vue'
+ import Panel from '@/components/ui/Panel.vue'
+ import {
+     mdiAlertOutline,
+@@ -175,6 +177,7 @@ import ConfirmationDialog from '@/components/dialogs/ConfirmationDialog.vue'
+         Panel,
+         StatusPanelExcludeObject,
+         StatusPanelGcodefiles,
++        StatusPanelHalyardHandoff,
+         StatusPanelHistory,
+         StatusPanelJobqueue,
+         StatusPanelPrintstatus,
+@@ -326,6 +329,10 @@ export default class StatusPanel extends Mixins(BaseMixin) {
+     }
+ 
+     get display_message() {
++        // Halyard: during a hand-off, display_status repeats its progress for other UIs; the
++        // hand-off's own row shows it here.
++        if ((this.$store.state.printer.halyard?.handoff?.state ?? 'idle') !== 'idle') return null
++
+         return this.$store.state.printer.display_status?.message ?? null
+     }
+ 
+diff --git a/src/locales/en.json b/src/locales/en.json
+index da51b19..1fd1107 100644
+--- a/src/locales/en.json
++++ b/src/locales/en.json
+@@ -999,6 +999,17 @@
+             "Filament": "Filament",
+             "File": "File",
+             "Flow": "Flow",
++            "Handoff": {
++                "Cancel": "Stop the copy",
++                "Copy": "Copying {filename} to the printer's card",
++                "CopyThenPrint": "{filename}: copying to the printer's card, then printing",
++                "Left": "{time} left",
++                "Listing": "Checking the printer's card",
++                "Preheating": "Preheating",
++                "Progress": "{done} of {total}",
++                "Speed": "{speed}/s",
++                "Starting": "Starting the print"
++            },
+             "Headline": "Status",
+             "JobqueueMoreFiles": "no more jobs | one more job | {count} more jobs",
+             "Layer": "Layer",

@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Tue, 29 Sep 2026 22:25:52 +0200
+Subject: [PATCH 06/14] ConnectionStatus: Mainsail, Halyard, Printer
+
+The connection diagram (shown while connecting, and when the printer can't be reached) named
+Moonraker and Klipper. With Halyard, the middle is Halyard and the end is the printer itself.
+The labels are centred under their icons, since the new words are shorter.
+
+diff --git a/public/halyard-config.html b/public/halyard-config.html
+new file mode 100644
+index 0000000..bfa769b
+--- /dev/null
++++ b/public/halyard-config.html
+@@ -0,0 +1,28 @@
++<!doctype html>
++<html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1">
++<title>halyard.cfg Reference</title>
++<style>
++:root { --bg:#f6f7f9; --card:#fff; --text:#1d232b; --muted:#5b6573; --line:#dde2e8; --accent:#1f6feb; }
++@media (prefers-color-scheme: dark) {
++  :root { --bg:#121212; --card:#1e1e1e; --text:#e6e9ed; --muted:#9aa4b1; --line:#2f3338; --accent:#4c8dff; }
++}
++* { box-sizing:border-box; }
++body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
++main { max-width:46rem; margin:0 auto; padding:2rem 16px 3rem; }
++h1 { margin:0 0 .5rem; font-size:1.7rem; }
++nav { margin:1rem 0 1.5rem; }
++a { color:var(--accent); }
++section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem 1.3rem; margin-bottom:1rem; scroll-margin-top:1rem; }
++section:target { border-color:var(--accent); }
++h2 { margin:0 0 .4rem; font-size:1.15rem; font-family:ui-monospace,monospace; }
++dl { margin:0; } dt { margin-top:.9rem; font-weight:600; } dd { margin:.2rem 0 0; } dd p { margin:.15rem 0; }
++code { font-family:ui-monospace,monospace; font-size:.92em; overflow-wrap:anywhere; }
++.muted { color:var(--muted); font-size:.93rem; }
++</style></head><body><main>
++<h1>halyard.cfg</h1>
++<p></p>
++<p class=muted>Settings Halyard doesn't know are reported as warnings and otherwise ignored. After a change,
++SAVE &amp; RESTART reads the file again.</p>
++<nav><a href='#wifi'>[wifi]</a> · <a href='#access'>[access]</a> · <a href='#printer'>[printer]</a></nav>
++<section id='wifi'><h2>[wifi]</h2><dl><dt id='wifi.ssid'><code>ssid</code></dt><dd><p>The network Halyard joins. The name and password take the whole rest of the line.</p><p class=muted>Default: <span class=muted>empty</span></p></dd><dt id='wifi.password'><code>password</code></dt><dd><p></p><p class=muted>Default: <span class=muted>empty</span></p></dd><dt id='wifi.hostname'><code>hostname</code></dt><dd><p>Halyard&#x27;s name on the network: http://NAME.local/ (letters, digits and -).</p><p class=muted>Default: <code>halyard</code></p></dd></dl></section><section id='access'><h2>[access]</h2><dl><dt id='access.trusted'><code>trusted</code></dt><dd><p>Addresses that need no API key. Mainsail has no login, so your browser must be in one of these. The default is every private (home network) range. &quot;none&quot; trusts nobody.</p><p class=muted>Default: <code>10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, fe80::/10, ::1/128</code></p></dd><dt id='access.api_key'><code>api_key</code></dt><dd><p>Slicers outside the trusted ranges send this as their API key. Halyard fills it in; empty it and restart for a new one.</p><p class=muted>Default: <span class=muted>empty</span></p></dd></dl></section><section id='printer'><h2>[printer]</h2><dl><dt id='printer.binary_transfer'><code>binary_transfer</code></dt><dd><p>Marlin&#x27;s binary file transfer, when the printer offers it: about 3x faster. auto or off.</p><p class=muted>Default: <code>auto</code></p></dd><dt id='printer.screen_messages'><code>screen_messages</code></dt><dd><p>Show Halyard&#x27;s address, and problems such as a WiFi network it cannot join, on the printer&#x27;s screen. on or off.</p><p class=muted>Default: <code>on</code></p></dd></dl></section>
++</main></body></html>
+diff --git a/src/components/ui/ConnectionStatus.vue b/src/components/ui/ConnectionStatus.vue
+index 586cc0a..988c44b 100644
+--- a/src/components/ui/ConnectionStatus.vue
++++ b/src/components/ui/ConnectionStatus.vue
+@@ -64,10 +64,11 @@
+         <g id="Moonraker" transform="matrix(1,0,0,1,10,0)">
+             <g id="Moonraker_text" transform="matrix(1,0,0,1,120.368,6.1424)">
+                 <text
+-                    x="45.429px"
++                    x="84.632px"
+                     y="60.749px"
++                    text-anchor="middle"
+                     :style="'fill:rgb(' + colorMoonraker + ');font-family:Roboto;font-size:16px;'">
+-                    Moonraker
++                    Halyard
+                 </text>
+             </g>
+             <g id="Moonraker_icon" transform="matrix(2,0,0,2,181,-5)">
+@@ -110,10 +111,11 @@
+         <g id="Klipper" transform="matrix(1,0,0,1,10,0)">
+             <g id="Klipper_text" transform="matrix(1,0,0,1,317.036,6.1424)">
+                 <text
+-                    x="48.429px"
++                    x="72.964px"
+                     y="60.749px"
++                    text-anchor="middle"
+                     :style="'font-family:Roboto;font-size:16px;fill:rgb(' + colorKlipper + ');'">
+-                    Klipper
++                    Printer
+                 </text>
+             </g>
+             <g id="Klipper_icon" transform="matrix(2,0,0,2,366,-3)">

@@ -1,0 +1,55 @@
+# ---- Firmware builds ----
+.pio/
+build/
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults.*
+managed_components/
+dependencies.lock
+compile_commands.json
+*.bin
+*.elf
+*.map
+*.hex
+
+# ---- Secrets: never commit WiFi credentials or API keys ----
+secrets.h
+secrets.hpp
+credentials.h
+wifi_credentials.*
+*.secrets
+.env
+.env.*
+
+# ---- Build output: release files, Mainsail unpacked for the card ----
+/dist/
+/webui/
+
+# ---- API-capture tools: uploads, captured logs, test gcode ----
+tools/api-capture/uploads/
+*.gcode
+*.log
+capture/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~
+tools/api-capture/mainsail/
+tools/api-capture/marlinraker/
+tools/api-capture/marlinraker_files/
+
+# ---- Claude Code: personal notes ----
+CLAUDE.local.md

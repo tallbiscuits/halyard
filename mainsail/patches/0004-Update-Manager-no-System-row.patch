@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Tue, 29 Sep 2026 22:19:18 +0200
+Subject: [PATCH 04/14] Update Manager: no System row
+
+Mainsail always shows "System / OS-Packages", because its store always holds a system
+entry. Halyard has no operating system to update. Its firmware may get a row of its own
+later.
+
+diff --git a/src/components/panels/Machine/UpdatePanel.vue b/src/components/panels/Machine/UpdatePanel.vue
+index 6369e2d..a96638e 100644
+--- a/src/components/panels/Machine/UpdatePanel.vue
++++ b/src/components/panels/Machine/UpdatePanel.vue
+@@ -31,10 +31,6 @@
+                         <v-divider v-if="index" :key="'divider_' + module.name" class="my-0" />
+                         <update-panel-entry :key="module.name" :repo="module.data" />
+                     </template>
+-                    <template v-if="existsSystemModul">
+-                        <v-divider v-if="modules.length" class="my-0" />
+-                        <update-panel-entry-system />
+-                    </template>
+                     <template v-if="showUpdateAll">
+                         <v-divider class="mb-0 mt-2 border-top-2" />
+                         <update-panel-entry-all />
+@@ -59,14 +55,13 @@ import { Component, Mixins } from 'vue-property-decorator'
+ import BaseMixin from '../../mixins/base'
+ import Panel from '@/components/ui/Panel.vue'
+ import UpdatePanelEntry from '@/components/panels/Machine/UpdatePanel/Entry.vue'
+-import UpdatePanelEntrySystem from '@/components/panels/Machine/UpdatePanel/EntrySystem.vue'
+ import UpdatePanelEntryAll from '@/components/panels/Machine/UpdatePanel/EntryAll.vue'
+ import { mdiRefresh, mdiInformation, mdiCloseThick, mdiUpdate } from '@mdi/js'
+ import { ServerUpdateManagerStateGuiList } from '@/store/server/updateManager/types'
+ import semver from 'semver'
+ 
+ @Component({
+-    components: { Panel, UpdatePanelEntry, UpdatePanelEntrySystem, UpdatePanelEntryAll },
++    components: { Panel, UpdatePanelEntry, UpdatePanelEntryAll },
+ })
+ export default class UpdatePanel extends Mixins(BaseMixin) {
+     mdiRefresh = mdiRefresh
+@@ -82,10 +77,6 @@ export default class UpdatePanel extends Mixins(BaseMixin) {
+         return this.$store.getters['server/updateManager/getUpdateManagerList'] ?? []
+     }
+ 
+-    get existsSystemModul() {
+-        return 'system' in this.$store.state.server.updateManager
+-    }
+-
+     get systemPackagesCount() {
+         return this.$store.state.server.updateManager?.system?.package_count ?? 0
+     }

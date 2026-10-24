@@ -1,0 +1,133 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A release, on a version tag (v0.6.0): the host tests, then what ./run.sh release builds
+# (the merged image, firmware.bin, the fork's mainsail zip, the card zip, SHA256SUMS), as a
+# GitHub Release, and the web flasher on GitHub Pages. Run by hand (workflow_dispatch), it
+# builds the same files as an artifact and publishes nothing.
+#
+# It runs run.sh itself, so CI and a local release are the same build: PlatformIO in
+# ~/.platformio/penv (where run.sh looks), esptool and the Mainsail build in Docker.
+# Pages must be set to "GitHub Actions" in the repository's settings.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # version.py names the commit (git describe)
+
+      - name: Version
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then ver=${GITHUB_REF_NAME#v}
+          else ver=$(sed -n 's/^BASE = "\(.*\)"/\1/p' firmware/version.py)-g$(git rev-parse --short=7 HEAD)
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4  # the update page's test (firmware/test/js/)
+        with:
+          node-version: "22"
+
+      - name: Host packages
+        run: sudo apt-get update -q && sudo apt-get install -yq zlib1g-dev  # the native tests link -lz
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+
+      - name: Cache Mainsail's npm
+        uses: actions/cache@v4
+        with:
+          path: mainsail/work/npm-cache
+          key: npm-${{ hashFiles('mainsail/UPSTREAM') }}
+
+      - name: PlatformIO
+        run: |
+          [ -x ~/.platformio/penv/bin/pio ] || python -m venv ~/.platformio/penv
+          ~/.platformio/penv/bin/pip install -q platformio==6.2.0
+
+      - name: Build the release
+        env:
+          # The flasher page's card link: the zip on this release.
+          HALYARD_RELEASES: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/halyard-card-${{ steps.version.outputs.version }}.zip
+        run: ./run.sh release "${{ steps.version.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: halyard-${{ steps.version.outputs.version }}
+          path: dist/release/
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref_type == 'tag'
+        with:
+          path: dist/flasher/
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: halyard-${{ needs.build.outputs.version }}
+          path: release
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          FLASHER: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          cat > notes.md <<EOF
+          **First install:** open the [web flasher](${FLASHER,,}) in Chrome or Edge, then unzip
+          \`halyard-card-$VERSION.zip\` onto a FAT32 microSD card and fill in \`[wifi]\` in
+          \`halyard.cfg\`. The README has the whole quick start.
+
+          **Updating an installed Halyard:** drop \`firmware.bin\` on Halyard's update page,
+          \`http://<halyard>/halyard/\`.
+
+          | File | For |
+          |---|---|
+          | \`halyard-$VERSION.bin\` | A first install with esptool: \`esptool write-flash 0x0 halyard-$VERSION.bin\` |
+          | \`firmware.bin\` | Updates over WiFi |
+          | \`halyard-card-$VERSION.zip\` | The microSD card's contents |
+          | \`mainsail-*.zip\` | Halyard's Mainsail, fetched by Halyard itself |
+          | \`SHA256SUMS\` | Checksums |
+          EOF
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" \
+            --title "Halyard $VERSION" --notes-file notes.md --verify-tag
+
+  pages:
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

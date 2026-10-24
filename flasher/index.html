@@ -1,0 +1,104 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Halyard's web flasher (ESP Web Tools). ./run.sh release copies it to dist/flasher/ and fills
+     in @VERSION@ and @RELEASES@; manifest.json and the merged image sit next to it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halyard Installer</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d232b; --muted: #5b6573; --line: #dde2e8;
+    --accent: #1f6feb; --accent-text: #ffffff; --warn-bg: #fff4e0; --warn-text: #7a4b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161b; --card: #1b2128; --text: #e6e9ed; --muted: #9aa4b1; --line: #2c343d;
+      --accent: #4c8dff; --accent-text: #0b0f14; --warn-bg: #3a2c12; --warn-text: #f3cf8a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 16px 3rem; }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; }
+  .version { color: var(--muted); margin: 0 0 2rem; }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1.25rem 1.4rem; margin-bottom: 1rem;
+  }
+  h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+  ol, ul { padding-left: 1.3rem; margin: .5rem 0 0; }
+  li { margin: .3rem 0; }
+  code { font-size: .92em; background: var(--bg); padding: .1em .35em; border-radius: 4px; }
+  a { color: var(--accent); }
+  .install { margin: 1rem 0 .25rem; }
+  esp-web-install-button button[slot="activate"] {
+    font: inherit; font-weight: 600; padding: .65rem 1.4rem; border: 0; border-radius: 8px;
+    background: var(--accent); color: var(--accent-text); cursor: pointer;
+  }
+  .note { background: var(--warn-bg); color: var(--warn-text); border-radius: 8px; padding: .7rem .9rem; }
+  .muted { color: var(--muted); font-size: .93rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Halyard</h1>
+  <p class="version">WiFi print server for Marlin printers · firmware @VERSION@</p>
+
+  <section>
+    <h2>1. Install the firmware</h2>
+    <ol>
+      <li>Plug the Waveshare ESP32-S3-GEEK into this computer's USB port.</li>
+      <li>Press <b>Install</b> and pick the GEEK's port. Nothing needs installing first.</li>
+      <li>When it says the installation is complete, unplug the GEEK and plug it back in. Until
+        then it stays in its installer and Halyard doesn't start.</li>
+    </ol>
+    <div class="install">
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate">Install</button>
+        <p slot="unsupported" class="note">This browser can't talk to USB devices. Open this page
+          in Chrome or Edge on a desktop computer (not Firefox or Safari).</p>
+        <p slot="not-allowed" class="note">The installer only works over https or on
+          localhost.</p>
+      </esp-web-install-button>
+    </div>
+    <ul class="muted">
+      <li>No port listed? Unplug the GEEK, hold its <b>BOOT</b> button while plugging it back
+        in, then try again.</li>
+      <li>A first install should erase the device. Updating an installed Halyard is easier from
+        its own update page, <code>http://&lt;halyard&gt;/halyard/</code>, and keeps its settings.</li>
+      <li>On Linux, your user must be in the <code>dialout</code> group to open the port.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>2. Prepare the microSD card</h2>
+    <ol>
+      <li>Use a card of 32 GB or less, formatted FAT32.</li>
+      <li>Download <a href="@RELEASES@">halyard-card-@VERSION@.zip</a> and unzip it onto the card.</li>
+      <li>Open <code>halyard.cfg</code> on the card in a text editor and fill in <code>ssid</code>
+        and <code>password</code> under <code>[wifi]</code>.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>3. Fit it to the printer</h2>
+    <ol>
+      <li>Put the card in the GEEK and wire its UART connector to the printer's serial header,
+        with power from the header's 5 V (never 3.3 V).</li>
+      <li>Power on. The printer's screen shows <code>Halyard 192.168.x.y</code>, or what's wrong.</li>
+      <li>Open that address for Mainsail. In the slicer, add a printer host of type OctoPrint at
+        the same address.</li>
+    </ol>
+    <p class="muted">Stuck? Plug the GEEK into the computer, press Install again and choose
+      <b>Logs &amp; Console</b>: Halyard's console lists its commands with <code>help</code>, and
+      <code>wifi</code> shows or sets the network.</p>
+  </section>
+</main>
+</body>
+</html>

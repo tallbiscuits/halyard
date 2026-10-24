@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 20:38:01 +0200
+Subject: [PATCH 11/14] Toolhead: the bars' jog buttons only for homed axes
+
+Marlin moves an unhomed axis anywhere, into the frame. Klipper refuses those moves
+and Mainsail's bars leave the buttons on; Halyard refuses them too, and the bars now
+grey them out, as the cross and circle layouts and Move to already do.
+
+diff --git a/src/components/panels/ToolheadControls/BarsControl.vue b/src/components/panels/ToolheadControls/BarsControl.vue
+index beb2224..dad508f 100644
+--- a/src/components/panels/ToolheadControls/BarsControl.vue
++++ b/src/components/panels/ToolheadControls/BarsControl.vue
+@@ -60,7 +60,7 @@
+                     <v-btn
+                         v-for="steps of stepsXYsorted"
+                         :key="'x-' + steps"
+-                        :disabled="['printing'].includes(printer_state)"
++                        :disabled="!xAxisHomed || ['printing'].includes(printer_state)"
+                         class="btnMinWidthAuto col btnGroup"
+                         @click="doSendMove('X-' + steps, feedrateXY)">
+                         <span class="body-2">–{{ steps }}</span>
+@@ -76,7 +76,7 @@
+                     <v-btn
+                         v-for="steps of stepsXYsortedReverse"
+                         :key="'x+' + steps"
+-                        :disabled="['printing'].includes(printer_state)"
++                        :disabled="!xAxisHomed || ['printing'].includes(printer_state)"
+                         class="btnMinWidthAuto col btnGroup"
+                         @click="doSendMove('X+' + steps, feedrateXY)">
+                         <span class="body-2">+{{ steps }}</span>
+@@ -91,7 +91,7 @@
+                     <v-btn
+                         v-for="steps of stepsXYsorted"
+                         :key="'y-' + steps"
+-                        :disabled="['printing'].includes(printer_state)"
++                        :disabled="!yAxisHomed || ['printing'].includes(printer_state)"
+                         class="btnMinWidthAuto col btnGroup"
+                         @click="doSendMove('Y-' + steps, feedrateXY)">
+                         <span class="body-2">–{{ steps }}</span>
+@@ -107,7 +107,7 @@
+                     <v-btn
+                         v-for="steps of stepsXYsortedReverse"
+                         :key="'y+' + steps"
+-                        :disabled="['printing'].includes(printer_state)"
++                        :disabled="!yAxisHomed || ['printing'].includes(printer_state)"
+                         class="btnMinWidthAuto col btnGroup"
+                         @click="doSendMove('Y+' + steps, feedrateXY)">
+                         <span class="body-2">+{{ steps }}</span>
+@@ -122,7 +122,7 @@
+                     <v-btn
+                         v-for="steps of stepsZsorted"
+                         :key="'z-' + steps"
+-                        :disabled="['printing'].includes(printer_state)"
++                        :disabled="!zAxisHomed || ['printing'].includes(printer_state)"
+                         class="btnMinWidthAuto col btnGroup"
+                         @click="doSendMove('Z-' + steps, feedrateZ)">
+                         <span class="body-2">–{{ steps }}</span>
+@@ -138,7 +138,7 @@
+                     <v-btn
+                         v-for="steps of stepsZsortedReverse"
+                         :key="'z+' + steps"
+-                        :disabled="['printing'].includes(printer_state)"
++                        :disabled="!zAxisHomed || ['printing'].includes(printer_state)"
+                         class="btnMinWidthAuto col btnGroup"
+                         @click="doSendMove('Z+' + steps, feedrateZ)">
+                         <span class="body-2">+{{ steps }}</span>

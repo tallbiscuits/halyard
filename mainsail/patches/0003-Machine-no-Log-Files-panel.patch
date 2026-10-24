@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Tue, 29 Sep 2026 22:18:49 +0200
+Subject: [PATCH 03/14] Machine: no Log Files panel
+
+Halyard has no logs root (no Klipper, Moonraker or crowsnest logs), so the panel was empty.
+The endstop panel takes the row.
+
+diff --git a/src/pages/Machine.vue b/src/pages/Machine.vue
+index fc4d2df..5686a7d 100644
+--- a/src/pages/Machine.vue
++++ b/src/pages/Machine.vue
+@@ -9,12 +9,9 @@
+                 <system-panel></system-panel>
+                 <update-panel></update-panel>
+                 <v-row>
+-                    <v-col v-if="klipperState === 'ready'" class="col-12 col-sm-6 pb-0 pb-md-3">
++                    <v-col v-if="klipperState === 'ready'" class="col-12 pb-0 pb-md-3">
+                         <endstop-panel></endstop-panel>
+                     </v-col>
+-                    <v-col :class="klipperState !== 'ready' ? 'col-12' : 'col-12 col-sm-6 pt-0 pt-sm-3'">
+-                        <logfiles-panel></logfiles-panel>
+-                    </v-col>
+                 </v-row>
+             </v-col>
+         </v-row>
+@@ -25,7 +22,6 @@ import { Component, Mixins } from 'vue-property-decorator'
+ import BaseMixin from '@/components/mixins/base'
+ import KlippyStatePanel from '@/components/panels/KlippyStatePanel.vue'
+ import UpdatePanel from '@/components/panels/Machine/UpdatePanel.vue'
+-import LogfilesPanel from '@/components/panels/Machine/LogfilesPanel.vue'
+ import EndstopPanel from '@/components/panels/Machine/EndstopPanel.vue'
+ import ConfigFilesPanel from '@/components/panels/Machine/ConfigFilesPanel.vue'
+ import SystemPanel from '@/components/panels/Machine/SystemPanel.vue'
+@@ -34,7 +30,6 @@ import SystemPanel from '@/components/panels/Machine/SystemPanel.vue'
+         SystemPanel,
+         ConfigFilesPanel,
+         EndstopPanel,
+-        LogfilesPanel,
+         UpdatePanel,
+         KlippyStatePanel,
+     },

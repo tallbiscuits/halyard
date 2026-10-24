@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tallbiscuits <112773728+tallbiscuits@users.noreply.github.com>
+Date: Sun, 4 Oct 2026 15:35:38 +0200
+Subject: [PATCH 12/14] G-code viewer: no live tracking
+
+The printer prints its own copy of the file, without the comments, so
+virtual_sdcard.file_position doesn't point into the file the viewer
+loaded, and the tracking falls further behind as the print goes on.
+
+diff --git a/src/components/gcodeviewer/Viewer.vue b/src/components/gcodeviewer/Viewer.vue
+index 55d3639..98c80d4 100644
+--- a/src/components/gcodeviewer/Viewer.vue
++++ b/src/components/gcodeviewer/Viewer.vue
+@@ -441,7 +441,9 @@ export default class Viewer extends Mixins(BaseMixin) {
+     }
+ 
+     get showTrackingButton() {
+-        return this.printerIsPrinting && this.sdCardFilePath === this.loadedFile
++        // Halyard: the printer prints its own copy, without the comments, so file_position
++        // doesn't point into the file loaded here, and tracking would fall behind.
++        return false
+     }
+ 
+     get printing_objects(): PrintableObject[] {
