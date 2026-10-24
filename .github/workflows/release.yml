@@ -6,7 +6,8 @@
 #
 # It runs run.sh itself, so CI and a local release are the same build: PlatformIO in
 # ~/.platformio/penv (where run.sh looks), esptool and the Mainsail build in Docker.
-# Pages must be set to "GitHub Actions" in the repository's settings.
+# Pages must be set to "GitHub Actions" in the repository's settings, and the github-pages
+# environment must allow tags v* (its default allows only main).
 name: Release
 
 on:
