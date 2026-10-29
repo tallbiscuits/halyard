@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The website on GitHub Pages, between releases: on a push to main that changes the site (or
+# what builds it), or run by hand. ./run.sh site latest puts site/ at the root and rebuilds the
+# web flasher at flasher/ from the latest release's own files (its merged image, checked
+# against its SHA256SUMS, and its card zip's URL), so no firmware is built here.
+#
+# A Pages deployment replaces the whole site, so this workflow deploys the flasher along with
+# the site, as release.yml does on a tag; the two take turns in the pages concurrency group.
+# Pages must be set to "GitHub Actions", and the github-pages environment must allow main.
+# With no release yet there is no flasher to put beside the site, and the build fails.
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "flasher/**"
+      - "tools/check_site.py"
+      - "run.sh"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The website, with the latest release's flasher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./run.sh site latest
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site/
+
+  pages:
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

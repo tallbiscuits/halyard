@@ -40,8 +40,8 @@ run it against a temporary folder and a simulated Marlin. Everything in it is dr
 | `test/js/test_update_page.mjs` | The update page's script in Node, against the real `mainsail.zip`, a card zip and a `firmware.bin`. |
 
 Outside `firmware/`: `card/halyard.cfg` is the file a card prepared on a PC starts with (a
-test checks it equals what the firmware writes), `tools/make_card.py` prepares a card, and
-`flasher/` holds the web flasher's page.
+test checks it equals what the firmware writes), `tools/make_card.py` prepares a card,
+`flasher/` holds the web flasher's page, and `site/` the website it sits in on GitHub Pages.
 
 The printer loop runs on core 1, and the web server and the update task on core 0.
 Everything that touches `lib/halyard` or the SD card holds `core_lock` (D10).
@@ -61,6 +61,7 @@ Run from the repository's root:
 ./run.sh card OUT [SSID [PASSWORD]]  # prepare a card on the PC: the mounted card, or a .zip
 ./run.sh release [VERSION]   # tests, then what a release ships, into dist/ (below)
 ./run.sh flasher [PORT]      # serve dist/ on localhost (default 8000) to try the web flasher
+./run.sh site [latest]       # the website with the web flasher, in dist/site/ (below)
 ./run.sh files [PORT]        # serve dist/release/ to the network as an [updates] source
 ./run.sh wsgap [host]        # a large upload and download, reporting the longest websocket silence
 ```
@@ -252,11 +253,31 @@ takes `HALYARD_VERSION`; without one it is `<base>-g<commit>`), and writes `dist
 | `release/SHA256SUMS` | Checksums of the above. The Update Manager reads the version from it (`halyard-<ver>.bin`) and checks `firmware.bin` against it. |
 | `flasher/` | `index.html` (from `flasher/`), `manifest.json` and the merged image, for ESP Web Tools 10.4.0. |
 
-`./run.sh flasher` serves `dist/` on `http://localhost:8000/`. Web Serial needs https or
-localhost, and Chrome or Edge. The manifest offers to erase on a new install, skips the Improv
-wait (Halyard has no Improv) and has no `serialType`, so the one build matches whatever type
-the browser reports for the port. The card link points at `../release/`; set
-`HALYARD_RELEASES` to point it elsewhere.
+`./run.sh flasher` serves `dist/`, with the flasher at `http://localhost:8000/flasher/`, as
+on the website. Web Serial needs https or localhost, and Chrome or Edge. The manifest offers
+to erase on a new install, skips the Improv wait (Halyard has no Improv) and has no
+`serialType`, so the one build matches whatever type the browser reports for the port. The
+card link points at `../release/`; set `HALYARD_RELEASES` to point it elsewhere (the release
+workflow points it at the zip on the GitHub release).
+
+### The website
+
+`site/` is the website on GitHub Pages, <https://tallbiscuits.github.io/halyard/>: one
+hand-written `index.html`, a stylesheet, the illustrations and the fonts (self-hosted, under
+the SIL Open Font License), with no build step and no framework. The web flasher sits beside it
+at `/flasher/`. A Pages deployment replaces the whole site, so the two are always deployed
+together. `./run.sh site` writes `dist/site/`: `site/` with `@VERSION@` filled in, and the
+flasher folder at `flasher/`. `tools/check_site.py` then checks that every internal link and
+anchor resolves and that no placeholder is left. Try it with
+`python3 -m http.server -d dist/site`.
+
+- `./run.sh site` takes the flasher from `dist/flasher` (run `./run.sh release` first). The
+  release workflow (`release.yml`, on a version tag) does that, and deploys it.
+- `./run.sh site latest` builds no firmware: it downloads the latest GitHub release's merged
+  image with `gh`, checks it against that release's `SHA256SUMS`, and points the card link at
+  that release's card zip. `site.yml` runs it on a push to `main` that changes the site, or by
+  hand, and deploys it. Without a release it fails.
+- Both workflows deploy in the `pages` concurrency group, one at a time.
 
 ## Klipper's commands in Marlin terms
 

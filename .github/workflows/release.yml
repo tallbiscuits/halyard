@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # A release, on a version tag (v0.6.0): the host tests, then what ./run.sh release builds
 # (the merged image, firmware.bin, the fork's mainsail zip, the card zip, SHA256SUMS), as a
-# GitHub Release, and the web flasher on GitHub Pages. Run by hand (workflow_dispatch), it
-# builds the same files as an artifact and publishes nothing.
+# GitHub Release, and GitHub Pages: the website (site/) at the root with this release's web
+# flasher at flasher/ (./run.sh site). Run by hand (workflow_dispatch), it builds the same
+# files as an artifact and publishes nothing. site.yml deploys the website between releases.
 #
 # It runs run.sh itself, so CI and a local release are the same build: PlatformIO in
 # ~/.platformio/penv (where run.sh looks), esptool and the Mainsail build in Docker.
 # Pages must be set to "GitHub Actions" in the repository's settings, and the github-pages
-# environment must allow tags v* (its default allows only main).
+# environment must allow tags v* (its default allows only main). A Pages deployment replaces
+# the whole site, so this workflow and site.yml both deploy the site and the flasher together,
+# one at a time (the pages concurrency group).
 name: Release
 
 on:
@@ -74,6 +77,9 @@ jobs:
           HALYARD_RELEASES: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/halyard-card-${{ steps.version.outputs.version }}.zip
         run: ./run.sh release "${{ steps.version.outputs.version }}"
 
+      - name: The website, with this release's flasher
+        run: ./run.sh site
+
       - uses: actions/upload-artifact@v4
         with:
           name: halyard-${{ steps.version.outputs.version }}
@@ -82,7 +88,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         if: github.ref_type == 'tag'
         with:
-          path: dist/flasher/
+          path: dist/site/
 
   release:
     needs: build
@@ -99,15 +105,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
-          FLASHER: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          FLASHER: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/flasher/
         run: |
           cat > notes.md <<EOF
           **First install:** open the [web flasher](${FLASHER,,}) in Chrome or Edge, then unzip
           \`halyard-card-$VERSION.zip\` onto a FAT32 microSD card and fill in \`[wifi]\` in
           \`halyard.cfg\`. The README has the whole quick start.
 
-          **Updating an installed Halyard:** drop \`firmware.bin\` on Halyard's update page,
-          \`http://<halyard>/halyard/\`.
+          **Updating an installed Halyard:** in Mainsail, **Machine**, Update Manager, the
+          **halyard** row. Halyard 0.5.0 has no such row: drop \`firmware.bin\` on its update
+          page, \`http://<halyard>/halyard/\`, once.
 
           | File | For |
           |---|---|
@@ -123,6 +130,9 @@ jobs:
   pages:
     needs: release
     runs-on: ubuntu-24.04
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

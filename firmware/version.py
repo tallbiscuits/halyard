@@ -7,7 +7,7 @@ import subprocess
 
 Import("env")
 
-BASE = "0.5.0"
+BASE = "0.6.1"
 here = env.subst("$PROJECT_DIR")
 try:
     rev = subprocess.check_output(["git", "describe", "--always", "--dirty", "--abbrev=7"],

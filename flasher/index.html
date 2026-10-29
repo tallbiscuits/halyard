@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Halyard's web flasher (ESP Web Tools). ./run.sh release copies it to dist/flasher/ and fills
-     in @VERSION@ and @RELEASES@; manifest.json and the merged image sit next to it. -->
+<!-- Halyard's web flasher (ESP Web Tools), at flasher/ on the website. run.sh (flasher_page)
+     copies it to dist/flasher/ and fills in @VERSION@ and @RELEASES@ (the card zip's URL);
+     manifest.json and the merged image sit next to it. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -43,10 +44,12 @@
   }
   .note { background: var(--warn-bg); color: var(--warn-text); border-radius: 8px; padding: .7rem .9rem; }
   .muted { color: var(--muted); font-size: .93rem; }
+  .back { margin: 0 0 1.5rem; font-size: .95rem; }
 </style>
 </head>
 <body>
 <main>
+  <p class="back"><a href="../">← Halyard's website</a>: the quick start, wiring and reference</p>
   <h1>Halyard</h1>
   <p class="version">WiFi print server for Marlin printers · firmware @VERSION@</p>
 
@@ -71,7 +74,8 @@
       <li>No port listed? Unplug the GEEK, hold its <b>BOOT</b> button while plugging it back
         in, then try again.</li>
       <li>A first install should erase the device. Updating an installed Halyard is easier from
-        its own update page, <code>http://&lt;halyard&gt;/halyard/</code>, and keeps its settings.</li>
+        Mainsail's Update Manager (or its update page, <code>http://&lt;halyard&gt;/halyard/</code>),
+        and keeps its settings.</li>
       <li>On Linux, your user must be in the <code>dialout</code> group to open the port.</li>
     </ul>
   </section>

@@ -3,6 +3,9 @@
 A WiFi print server for Marlin 3D printers that runs on a cheap ESP32-S3 stick instead of a Raspberry Pi. Send G-code straight from your slicer, run the printer from Mainsail in your  
 browser, and let the printer print from its own SD card. It is powered by the printer. No Linux, no second power supply, no cloud.
 
+The website, [tallbiscuits.github.io/halyard/](https://tallbiscuits.github.io/halyard/), has the quick start and the reference in one page, and
+the [web flasher](https://tallbiscuits.github.io/halyard/flasher/) for a first install.
+
 ## What you need
 
 - **A Marlin 2.x printer with an SD card slot** and a free serial port on a header. Optional features make it faster  
@@ -17,7 +20,7 @@ with a microSD slot and a UART connector.
 
 ### 1. Install the firmware (once, over USB)
 
-1. Open the web flasher, linked from the [latest release](../../releases/latest), in your browser.
+1. Open the [web flasher](https://tallbiscuits.github.io/halyard/flasher/) in Chrome or Edge.
 2. Plug the GEEK into the computer, press **Install** and pick its port. Let it erase the
  device.
 3. When it says the installation is complete, **unplug the GEEK and plug it back in**.
@@ -99,7 +102,7 @@ header is the port Marlin's `SERIAL_PORT` names, and that the baud rate is 25000
 - **The card isn't seen:** it must be FAT32 and 32 GB or smaller.
 - **`halyard.local` doesn't open:** use the IP address from the printer's screen. Browsers
 installed as Flatpaks can't resolve `.local` names.
-- **Halyard's console:** plug the GEEK into a computer, open the web flasher and choose
+- **Halyard's console:** plug the GEEK into a computer, open the [web flasher](https://tallbiscuits.github.io/halyard/flasher/) and choose
 **Logs &amp; Console**. `help` lists the commands, and `wifi` shows or sets the network.
 
 ## Everyday use
@@ -183,6 +186,7 @@ has the details, every command, and the limitations.
 ./run.sh monitor                             # the USB console
 ./run.sh release [VERSION]                   # the release files and the web flasher, in dist/
 ./run.sh flasher                             # try the web flasher on localhost
+./run.sh site [latest]                       # the website with the flasher, in dist/site/
 ```
 
 ### Repository layout
@@ -194,8 +198,9 @@ has the details, every command, and the limitations.
 | `firmware/`                         | **The firmware** (PlatformIO): `lib/halyard/` is portable C++, `src/` the ESP32 glue, `test/` the host tests                                                                 |
 | `card/`                             | `halyard.cfg` as a new card starts with it                                                                                                                                   |
 | `flasher/`                          | The web flasher's page (ESP Web Tools)                                                                                                                                       |
+| `site/`                             | The website on GitHub Pages, written by hand; the flasher goes beside it at `flasher/`                                                                                      |
 | `mainsail/`                         | Halyard's Mainsail: the upstream tag plus a few patches, and the script that builds it                                                                                       |
-| `tools/`                            | Card preparation and a websocket stress test; `api-capture/` has the laptop tools that measured the APIs (OctoPrint stub, Marlinraker in Docker, Mainsail API-capture proxy) |
+| `tools/`                            | Card preparation, a websocket stress test and the website's link check; `api-capture/` has the laptop tools that measured the APIs (OctoPrint stub, Marlinraker in Docker, Mainsail API-capture proxy) |
 | `docs/firmware.md`                  | The firmware's design, settings, updates, and Klipper's commands in Marlin terms                                                                                             |
 | `docs/decisions.md`                 | Why the architecture is the way it is (D1–D14)                                                                                                                               |
 | `docs/research/api-contracts.md`    | Exact OctoPrint / Moonraker wire contracts                                                                                                                                   |

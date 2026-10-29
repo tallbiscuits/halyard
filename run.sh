@@ -15,7 +15,12 @@
 #   ./run.sh release [VERSION]  test, then build what a release ships into dist/: the merged
 #                               image for a first install, firmware.bin for updates, the card
 #                               zip, and the web flasher (default version: 0.5.0-g<commit>)
-#   ./run.sh flasher [PORT]     serve dist/ on http://localhost:PORT (8000) to try the flasher
+#   ./run.sh flasher [PORT]     serve dist/ on http://localhost:PORT (8000) to try the flasher,
+#                               at /flasher/
+#   ./run.sh site [latest]      the website (site/) with the web flasher at flasher/, in
+#                               dist/site/, as GitHub Pages serves it: the flasher from
+#                               dist/flasher (run release first), or with "latest" from the
+#                               latest GitHub release's files (gh), building no firmware
 #   ./run.sh files [PORT]       serve dist/release/ to the network (default 8000), as an update
 #                               source for halyard.cfg's [updates] source until GitHub has them
 #   ./run.sh wsgap [host] [--size MB | --file PATH]
@@ -83,11 +88,68 @@ run_tests() {
   else echo "node not found: the update page's test was skipped"; fi
 }
 
+check_version() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9.+-]*$ ]] || { echo "bad version: $1" >&2; exit 2; }; }
+
+# The web flasher's folder, for ESP Web Tools: flasher/index.html with @VERSION@ and @RELEASES@
+# (the card zip's URL) filled in, manifest.json, and the merged image beside them.
+#   flasher_page OUT VERSION IMAGE CARD_URL
+flasher_page() {
+  local out=$1 ver=$2 img=$3 card=$4
+  mkdir -p "$out"
+  cp "$img" "$out/halyard-$ver.bin"
+  sed -e "s/@VERSION@/$ver/g" -e "s|@RELEASES@|$card|g" flasher/index.html > "$out/index.html"
+  cat > "$out/manifest.json" <<JSON
+{
+  "name": "Halyard",
+  "version": "$ver",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    { "chipFamily": "ESP32-S3", "parts": [ { "path": "halyard-$ver.bin", "offset": 0 } ] }
+  ]
+}
+JSON
+}
+
+# The website as GitHub Pages serves it, in dist/site/: site/ with @VERSION@ filled in, and a
+# flasher folder at flasher/. A Pages deployment replaces the whole site, so the two always go
+# together. Then every internal link and anchor is checked.
+#   site_build FLASHER_DIR VERSION
+site_build() {
+  local fl=$1 ver=$2 out=dist/site
+  rm -rf "$out" && mkdir -p "$out"
+  cp -r site/. "$out/"
+  sed -i "s/@VERSION@/$ver/g" "$out/index.html"
+  cp -r "$fl" "$out/flasher"
+  # A local release's card link is ../release/ (./run.sh flasher serves dist/): keep it working.
+  if grep -q 'href="\.\./release/' "$out/flasher/index.html"; then
+    mkdir -p "$out/release" && cp "dist/release/halyard-card-$ver.zip" "$out/release/"
+  fi
+  python3 tools/check_site.py "$out"
+  echo "dist/site/ for Halyard $ver: python3 -m http.server -d dist/site, then http://localhost:8000/"
+}
+
+# The flasher from the latest GitHub release's own files (no firmware build), then the site.
+# GH_TOKEN must be set in CI; locally, gh's login.
+site_latest() {
+  local repo=${GITHUB_REPOSITORY:-tallbiscuits/halyard} tag ver dl=dist/latest
+  command -v gh >/dev/null || { echo "site latest needs the GitHub CLI (gh)" >&2; exit 1; }
+  tag=$(gh release view --repo "$repo" --json tagName -q .tagName 2>/dev/null) || tag=
+  [ -n "$tag" ] || { echo "$repo has no release yet: the site needs one for its web flasher" >&2; exit 1; }
+  ver=${tag#v}; check_version "$ver"
+  rm -rf "$dl" && mkdir -p "$dl"
+  gh release download "$tag" --repo "$repo" --dir "$dl" -p "halyard-$ver.bin" -p SHA256SUMS
+  (cd "$dl" && sha256sum -c --ignore-missing SHA256SUMS)
+  flasher_page "$dl/flasher" "$ver" "$dl/halyard-$ver.bin" \
+    "https://github.com/$repo/releases/download/$tag/halyard-card-$ver.zip"
+  site_build "$dl/flasher" "$ver"
+}
+
 # What a GitHub release will carry, built locally. The merged image holds everything
 # "flash" writes, from 0x0, for ESP Web Tools and "esptool write-flash 0x0".
 release() {
   local ver=$1 rel=dist/release fl=dist/flasher
-  [[ "$ver" =~ ^[A-Za-z0-9][A-Za-z0-9.+-]*$ ]] || { echo "bad version: $ver" >&2; exit 2; }
+  check_version "$ver"
   [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "note: uncommitted changes go into this build" >&2
   run_tests env HALYARD_VERSION="$ver" $PIO run -d firmware -e geek
   serial_image; mainsail_release
@@ -99,20 +161,7 @@ release() {
   cp "$BUILD/firmware.bin" "$rel/firmware.bin"
   cp "$MAINSAIL_ZIP" "$rel/"  # the file the firmware fetches: SOURCE/mainsail-<version>.zip
   python3 tools/make_card.py "$MAINSAIL_DIR" "$rel/halyard-card-$ver.zip"
-  cp "$rel/halyard-$ver.bin" "$fl/"
-  sed -e "s/@VERSION@/$ver/g" -e "s|@RELEASES@|${HALYARD_RELEASES:-../release/halyard-card-$ver.zip}|g" \
-    flasher/index.html > "$fl/index.html"
-  cat > "$fl/manifest.json" <<JSON
-{
-  "name": "Halyard",
-  "version": "$ver",
-  "new_install_prompt_erase": true,
-  "new_install_improv_wait_time": 0,
-  "builds": [
-    { "chipFamily": "ESP32-S3", "parts": [ { "path": "halyard-$ver.bin", "offset": 0 } ] }
-  ]
-}
-JSON
+  flasher_page "$fl" "$ver" "$rel/halyard-$ver.bin" "${HALYARD_RELEASES:-../release/halyard-card-$ver.zip}"
   (cd "$rel" && sha256sum -- * > SHA256SUMS)
   echo; echo "dist/ for Halyard $ver:"; (cd dist && find . -type f | sort | xargs ls -l | awk '{printf "  %9d  %s\n", $5, $NF}')
 }
@@ -166,11 +215,16 @@ case "${1:-test}" in
            ip=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
            echo "in halyard.cfg:  [updates] source: http://${ip:-THIS-PC}:${2:-8000}/   (Ctrl-C stops)"
            exec python3 -m http.server "${2:-8000}" --directory dist/release ;;
+  site)    if [ "$2" = latest ]; then site_latest
+           else
+             [ -f dist/flasher/manifest.json ] || { echo "no dist/flasher: run $0 release first, or $0 site latest" >&2; exit 1; }
+             site_build dist/flasher "$(sed -n 's/^  "version": "\(.*\)",$/\1/p' dist/flasher/manifest.json)"
+           fi ;;
   flasher) [ -f dist/flasher/manifest.json ] || { echo "no dist/flasher: run $0 release first" >&2; exit 1; }
            echo "the flasher: http://localhost:${2:-8000}/flasher/ (Chrome or Edge; Ctrl-C stops)"
            exec python3 -m http.server "${2:-8000}" --bind 127.0.0.1 --directory dist ;;
   wsgap)   [ -d venv ] || python3 -m venv venv
            venv/bin/pip install -q -r tools/requirements.txt
            exec venv/bin/python tools/wsgap.py "${2:-halyard.local}" "${@:3}" ;;
-  *)       echo "usage: $0 [test|build|flash|monitor [device] | ota|webui|mainsail|wsgap [host] | card OUT [SSID [PASSWORD]] | release [VERSION] | flasher [PORT] | files [PORT]]" >&2; exit 2 ;;
+  *)       echo "usage: $0 [test|build|flash|monitor [device] | ota|webui|mainsail|wsgap [host] | card OUT [SSID [PASSWORD]] | release [VERSION] | site [latest] | flasher [PORT] | files [PORT]]" >&2; exit 2 ;;
 esac

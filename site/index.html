@@ -1,0 +1,544 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Halyard's website, the front page of GitHub Pages. Written by hand: no framework, no build
+     step beyond ./run.sh site, which fills in @VERSION@ (the latest release's) and puts the web
+     flasher beside it at flasher/. The content follows README.md and docs/firmware.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halyard: a WiFi print server for Marlin printers</title>
+<meta name="description" content="Halyard is a WiFi print server for Marlin 3D printers on a cheap ESP32-S3 stick: send G-code from your slicer, run the printer from Mainsail, and let it print from its own SD card. No Raspberry Pi.">
+<meta name="theme-color" content="#0B1E33">
+<link rel="icon" href="img/mark.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/space-grotesk-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="nav">
+  <div class="wrap nav-row">
+    <a class="brand" href="#top" aria-label="Halyard, back to the top">
+      <img src="img/mark.svg" width="32" height="32" alt="">
+      <span>Halyard</span>
+    </a>
+    <nav aria-label="Main">
+      <ul class="nav-links">
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#quick-start">Quick start</a></li>
+        <li><a href="#reference">Reference</a></li>
+        <li><a href="https://github.com/tallbiscuits/halyard">GitHub</a></li>
+      </ul>
+    </nav>
+    <a class="btn btn-small" href="https://github.com/tallbiscuits/halyard/releases/latest">Download v@VERSION@</a>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" id="top">
+  <div class="wrap hero-row">
+    <div class="hero-text">
+      <p class="pill"><span class="dot" aria-hidden="true"></span>v@VERSION@ · open source · GPL-3.0-or-later</p>
+      <h1>Your Marlin printer, on WiFi. No Raspberry&nbsp;Pi.</h1>
+      <p class="lead">Halyard is a print server on a cheap ESP32-S3 stick, powered by the printer.
+        Send G-code straight from your slicer, run the printer from Mainsail in your browser, and
+        let it print from its own SD card.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="#quick-start">Get started
+          <svg class="arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+        <a class="btn btn-secondary" href="#reference">Technical reference</a>
+      </div>
+      <p class="flasher-link"><a href="flasher/">Install with the web flasher
+        <svg class="arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+        <span>Chrome or Edge, with the GEEK on USB</span></p>
+      <p class="nots"><span>No Linux</span><span aria-hidden="true">·</span><span>No second power supply</span><span aria-hidden="true">·</span><span>No cloud</span></p>
+    </div>
+    <figure class="hero-art">
+      <img src="img/illustration-hero.svg" width="720" height="460"
+        alt="A slicer (PrusaSlicer, OrcaSlicer) talks to Halyard through the OctoPrint API, and Mainsail in any browser through the Moonraker API, both over WiFi. Halyard, an ESP32-S3 stick with a microSD card, is wired by UART to the Marlin printer, which prints from its own SD card.">
+    </figure>
+  </div>
+</section>
+
+<section class="band band-sand" id="overview" aria-labelledby="overview-h">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow teal">Why Halyard</p>
+      <h2 id="overview-h">A print server that can’t ruin a print</h2>
+      <p class="intro">Halyard hands each file to the printer's own SD card and lets the printer feed
+        itself. Everything else, from slicer uploads to Mainsail's dashboards, sits on top of that
+        one rule.</p>
+    </header>
+    <ul class="cards" role="list">
+      <li class="card">
+        <span class="icon icon-teal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="9" rx="1"/><path d="M10 12l2 3 2-3M5 20h14"/></svg></span>
+        <h3>The printer feeds itself</h3>
+        <p>Each file is copied to the printer's own card and started there. The print carries on if
+          Halyard restarts or loses WiFi, so even a firmware update mid-print is fine.</p>
+      </li>
+      <li class="card">
+        <span class="icon icon-orange" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4M6 10l6-6 6 6M5 20h14"/></svg></span>
+        <h3>Upload from your slicer</h3>
+        <p>PrusaSlicer and OrcaSlicer see an OctoPrint host. Send, or Upload and Print, and the file
+          is on Halyard's card in seconds, with its thumbnails and metadata.</p>
+      </li>
+      <li class="card">
+        <span class="icon icon-navy" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18M7 16l3-3 3 2 4-4"/></svg></span>
+        <h3>Mainsail in your browser</h3>
+        <p>A light fork of Mainsail, served from Halyard's card. Klipper's buttons are translated
+          into Marlin's G-code, and panels for features your printer lacks stay hidden.</p>
+      </li>
+      <li class="card">
+        <span class="icon icon-teal" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v10H10l-5 4v-4H4z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg></span>
+        <h3>Ask, don’t configure</h3>
+        <p><code>M115</code> tells Halyard what the printer can do, so there are no board profiles.
+          Stock Marlin works with none of the optional features; each one it finds is put to
+          use.</p>
+      </li>
+      <li class="card">
+        <span class="icon icon-orange" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span>
+        <h3>Powered by the printer</h3>
+        <p>Three wires and 5 V from a serial header on the board. No Linux to maintain, no second
+          power supply, and no cloud account.</p>
+      </li>
+      <li class="card">
+        <span class="icon icon-navy" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg></span>
+        <h3>Updates with a safety net</h3>
+        <p>Firmware and Mainsail update from Mainsail's Update Manager. New firmware boots on trial
+          and goes back to the old one if it fails.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="band band-white" id="how" aria-labelledby="how-h">
+  <div class="wrap">
+    <header class="section-head centered">
+      <p class="eyebrow teal">How it works</p>
+      <h2 id="how-h">From slicer to first layer</h2>
+      <p class="intro">Files land on Halyard's card first. Only when you press Print does Halyard copy
+        the file to the printer's card and start it there. Nothing is copied or started without
+        your command.</p>
+    </header>
+    <figure class="art-wide scroll-x">
+      <img src="img/illustration-handoff.svg" width="1100" height="230"
+        alt="Five steps. On Halyard: 1, Upload, POST /api/files/local from the slicer or Mainsail; 2, Library, /sd/gcodes with metadata and thumbnails; 3, Hand-off over UART, M28 to M29 or M28 B1, only on your command. On the printer: 4, the printer's card, under an 8.3 name Halyard assigns (STEM~N.GCO); 5, Print, M23 and M24, and the printer feeds itself.">
+    </figure>
+  </div>
+</section>
+
+<section class="band band-sand" id="quick-start" aria-labelledby="qs-h">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow orange">Quick start</p>
+      <h2 id="qs-h">Printing over WiFi in five steps</h2>
+      <p class="intro">One install over USB, one text file, three wires. After that, everything
+        happens over WiFi.</p>
+    </header>
+
+    <div class="panel need">
+      <h3>What you need</h3>
+      <ul class="chips" role="list">
+        <li>A Marlin 2.x printer with an SD card slot and a free serial header</li>
+        <li><span>A <a href="https://www.waveshare.com/wiki/ESP32-S3-GEEK">Waveshare ESP32-S3-GEEK</a></span></li>
+        <li>A microSD card, FAT32, 32 GB or less</li>
+        <li>Three wires, and 5 V from the printer (a USB-A socket is simplest)</li>
+        <li>Chrome or Edge on a desktop, for the one-time install</li>
+      </ul>
+    </div>
+
+    <ol class="steps" role="list">
+      <li class="step" id="step-1">
+        <span class="num" aria-hidden="true">1</span>
+        <div class="step-body">
+          <h3>Install the firmware, once, over USB</h3>
+          <p>Open the <a href="flasher/">web flasher</a> in Chrome or Edge. Plug the GEEK into the
+            computer, press <b>Install</b> and pick its port, and let it erase the device. When it
+            says the installation is complete, unplug the GEEK and plug it back in.</p>
+          <p><a class="btn btn-primary btn-mid" href="flasher/">Open the web flasher
+            <svg class="arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a></p>
+        </div>
+        <aside class="tip">
+          <h4>No port listed?</h4>
+          <p>Unplug the GEEK, hold its BOOT button while plugging it back in, and try again. On
+            Linux, your user must be in the <code>dialout</code> group.</p>
+        </aside>
+      </li>
+
+      <li class="step" id="step-2">
+        <span class="num" aria-hidden="true">2</span>
+        <div class="step-body">
+          <h3>Prepare the card</h3>
+          <p>Download <code>halyard-card-&lt;version&gt;.zip</code> from the
+            <a href="https://github.com/tallbiscuits/halyard/releases/latest">latest release</a> and
+            unzip it onto the card. Open <code>halyard.cfg</code> in a text editor and fill in your
+            network under <code>[wifi]</code>. Then put the card in the GEEK.</p>
+        </div>
+        <pre class="code"><code><span class="c"># halyard.cfg, on the card</span>
+<span class="k">[wifi]</span>
+ssid: MyNetwork
+password: my secret password</code></pre>
+      </li>
+
+      <li class="step step-wide" id="step-3">
+        <span class="num" aria-hidden="true">3</span>
+        <div class="step-body">
+          <h3>Wire it to the printer</h3>
+          <p>Halyard needs a serial port (a UART) on the printer's board, the one Marlin talks G-code
+            on, and 5 V to run from. With the printer switched off:</p>
+          <ol class="sub">
+            <li><b>Find a serial header</b> with TX and RX pins (or the processor's pin names, such
+              as <code>PA9</code>/<code>PA10</code>). Headers for a touchscreen (<code>TFT</code>),
+              a WiFi module (<code>WIFI</code>, <code>ESP</code>) or an accessory
+              (<code>UART</code>, <code>AUX</code>) usually have one. <code>EXP1</code>/<code>EXP2</code>
+              and the board's USB port won't do.</li>
+            <li><b>Check that Marlin talks on it:</b> <code>SERIAL_PORT</code> or
+              <code>SERIAL_PORT_2</code> in <code>Configuration.h</code>, at 250000 or 115200 baud.
+              If neither names it, enable it as <code>SERIAL_PORT_2</code> with
+              <code>BAUDRATE_2 250000</code> and reflash Marlin. A port used by a touchscreen can't
+              be shared: the screen comes off.</li>
+            <li><b>Wire three signals, crossed over:</b> the header's TX to the GEEK's RX (GPIO44),
+              RX to TX (GPIO43), and GND to GND. Both sides use 3.3 V logic, so no level shifter is
+              needed.</li>
+            <li><b>Power the GEEK from 5 V</b>, most simply through a USB-A socket wired to a 5 V pin
+              and GND. <b>Never use a 3.3 V pin</b>: an ESP32 browns out on it. Halyard draws up to
+              about 350 mA in bursts.</li>
+            <li><b>Check once more</b> that TX goes to RX, RX to TX, and that nothing is wired to a
+              12 V or 24 V pin, then switch the printer on.</li>
+          </ol>
+        </div>
+        <figure class="step-art scroll-x">
+          <img src="img/illustration-wiring.svg" width="600" height="320"
+            alt="Wiring: the printer board's serial header has 5V, GND, TX and RX pins. 5 V and GND go to a USB-A socket that the GEEK plugs into, never a 3.3 V pin. The header's TX goes to the GEEK's RX (GPIO44) and RX to its TX (GPIO43), crossed over. 3.3 V logic on both sides, no level shifter; Halyard draws up to about 350 mA in bursts.">
+        </figure>
+      </li>
+
+      <li class="step" id="step-4">
+        <span class="num" aria-hidden="true">4</span>
+        <div class="step-body">
+          <h3>Power on</h3>
+          <p>The printer's screen shows Halyard and its address. Open that address in a browser:
+            that's Mainsail, running on Halyard. <code>http://halyard.local/</code> works too, where
+            your system resolves <code>.local</code> names.</p>
+        </div>
+        <figure class="screen">
+          <div class="lcd" aria-hidden="true"><span>Ender-3</span><b>Halyard 192.168.1.23</b></div>
+          <figcaption>The printer's own screen (<code>M117</code>)</figcaption>
+        </figure>
+      </li>
+
+      <li class="step" id="step-5">
+        <span class="num" aria-hidden="true">5</span>
+        <div class="step-body">
+          <h3>Add Halyard to your slicer</h3>
+          <p>In PrusaSlicer or OrcaSlicer, add a physical printer of type OctoPrint at Halyard's
+            address. Test the connection, then Send, or Upload and Print. When you start a print,
+            Halyard copies the file to the printer's card and starts it there.</p>
+        </div>
+        <figure class="dialog" aria-label="The slicer's physical printer settings">
+          <p class="dialog-title">Physical printer</p>
+          <dl>
+            <div><dt>Host type</dt><dd>OctoPrint</dd></div>
+            <div><dt>Hostname</dt><dd>192.168.1.23</dd></div>
+            <div><dt>API Key</dt><dd class="ph">not needed at home</dd></div>
+          </dl>
+          <p class="ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7"/></svg>Connection to OctoPrint works correctly.</p>
+        </figure>
+      </li>
+    </ol>
+
+    <section class="trouble" id="troubleshooting" aria-labelledby="trouble-h">
+      <h3 id="trouble-h">If something is wrong</h3>
+      <dl class="trouble-grid">
+        <div><dt>The printer's screen says what's wrong</dt>
+          <dd><code>Halyard: no SD card</code> · <code>Halyard: no WiFi set</code> ·
+            <code>Halyard: can't join NAME</code> (wrong network name or password).</dd></div>
+        <div><dt>Nothing on the screen?</dt>
+          <dd>Check the wiring (TX and RX crossed, a common GND), that the header is the port
+            Marlin's <code>SERIAL_PORT</code> names, and that the baud rate is 250000 or 115200.</dd></div>
+        <div><dt>The card isn't seen</dt>
+          <dd>It must be FAT32, and so 32 GB or smaller. Bigger cards come as exFAT, which the
+            firmware can't read.</dd></div>
+        <div><dt><code>halyard.local</code> doesn't open</dt>
+          <dd>Use the IP address from the printer's screen. Browsers installed as Flatpaks can't
+            resolve <code>.local</code> names.</dd></div>
+        <div><dt>Halyard's console</dt>
+          <dd>Plug the GEEK into a computer, open the <a href="flasher/">web flasher</a> and choose
+            <b>Logs &amp; Console</b>. <code>help</code> lists the commands, and <code>wifi</code>
+            shows or sets the network.</dd></div>
+      </dl>
+    </section>
+  </div>
+</section>
+
+<section class="band band-white" id="reference" aria-labelledby="ref-h">
+  <div class="wrap ref">
+    <nav class="sidebar" aria-labelledby="toc-h">
+      <p class="toc-h" id="toc-h">On this page</p>
+      <ul>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#settings">Settings: halyard.cfg</a></li>
+        <li><a href="#access">Access and security</a></li>
+        <li><a href="#updates">Updates and rollback</a></li>
+        <li><a href="#klipper">Klipper in Marlin terms</a></li>
+        <li><a href="#faster">Make it faster</a></li>
+        <li><a href="#building">Building from source</a></li>
+        <li><a href="#limitations">Limitations</a></li>
+      </ul>
+    </nav>
+
+    <div class="ref-content">
+      <header class="section-head">
+        <p class="eyebrow teal">Technical reference</p>
+        <h2 id="ref-h">How Halyard works, in depth</h2>
+        <p class="intro">The design, the settings, the update paths and how Mainsail's Klipper
+          controls map onto Marlin. Firmware @VERSION@, on Arduino-ESP32 3.3 and ESP-IDF 5.5. The
+          full reference is <a href="https://github.com/tallbiscuits/halyard/blob/main/docs/firmware.md">docs/firmware.md</a>,
+          and the reasons behind the design are in
+          <a href="https://github.com/tallbiscuits/halyard/blob/main/docs/decisions.md">docs/decisions.md</a>.</p>
+      </header>
+
+      <section class="ref-sec" id="architecture" aria-labelledby="arch-h">
+        <h3 id="arch-h">Architecture</h3>
+        <div class="two">
+          <div>
+            <p class="lead-dark">Three layers, and the seam between them is the design. Only the link
+              layer knows what it's plugged into.</p>
+            <ul class="bullets">
+              <li><code>lib/halyard/</code> is portable C++ with no Arduino, driven by
+                <code>poll(now_ms)</code>. Host tests run it against a simulated Marlin:
+                full-featured, minimal, and stock 2.1.2.8.</li>
+              <li>The printer loop runs on core 1. The web server and the update task run on
+                core 0.</li>
+              <li>From the printer, Halyard needs a serial port and SD support. Nothing else.</li>
+              <li>Not built yet, both optional: handing files over as USB mass storage, and live
+                streaming.</li>
+            </ul>
+          </div>
+          <figure class="scroll-x layers">
+            <img src="img/illustration-layers.svg" width="600" height="420"
+              alt="Three stacked layers between the slicer and Mainsail above and the Marlin printer below. Service layer (Service): the OctoPrint upload API, a Moonraker JSON-RPC subset, faked Klipper objects and Klipper commands in Marlin terms; it knows nothing about serial. Delivery layer (Library, Delivery): files, metadata and thumbnails on Halyard's SD; it hands a file to the printer's card (M28, binary when offered) only on your command. Link layer (Link, Printer): one UART with line numbers, checksums, resend and ok-based flow control; capabilities discovered from M115; the only layer that knows the board.">
+          </figure>
+        </div>
+      </section>
+
+      <section class="ref-sec" id="settings" aria-labelledby="settings-h">
+        <h3 id="settings-h">Settings: halyard.cfg</h3>
+        <p>Settings live in <code>halyard.cfg</code> at the card's root, in Klipper's format. Edit it
+          in Mainsail (<b>Machine</b>, <code>halyard.cfg</code>, then <b>SAVE &amp; RESTART</b>) or on
+          a computer with the card in a reader. WiFi changes restart Halyard; the rest applies at
+          once.</p>
+        <div class="two even">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th scope="col">Section</th><th scope="col">Keys</th></tr></thead>
+              <tbody>
+                <tr><th scope="row"><code class="key">[wifi]</code></th><td><code>ssid, password, hostname</code></td></tr>
+                <tr><th scope="row"><code class="key">[access]</code></th><td><code>trusted, api_key</code></td></tr>
+                <tr><th scope="row"><code class="key">[printer]</code></th><td><code>binary_transfer, screen_messages</code></td></tr>
+                <tr><th scope="row"><code class="key">[updates]</code></th><td><code>source</code> (where the update files are; empty: Halyard's releases)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="notes">
+            <li>The WiFi password goes over the network as <code>********</code>. Saving with the
+              stars unchanged keeps it.</li>
+            <li>Mistakes are warnings, not errors: the setting keeps its default, and Mainsail's
+              notification bell says why.</li>
+            <li>An empty <code>api_key</code> gets a new key, written into the file.</li>
+            <li>Without a card, Halyard runs from a copy of the last settings, kept in NVS.</li>
+            <li><code>screen_messages: off</code> stops the messages on the printer's screen.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="ref-sec" id="access" aria-labelledby="access-h">
+        <h3 id="access-h">Access and security</h3>
+        <p>Halyard follows Moonraker's model: trusted address ranges, or an API key. Set both in
+          <code>halyard.cfg</code>'s <code>[access]</code> section, or with the console's
+          <code>trust</code> and <code>apikey</code> commands.</p>
+        <div class="two even">
+          <div class="box">
+            <p class="eyebrow teal small">Trusted ranges</p>
+            <h4>Need nothing</h4>
+            <p>The default is the private address ranges, as in MainsailOS: anyone on your home
+              network can use Halyard.</p>
+            <p class="cmd"><code>trust add 192.168.1.0/24</code></p>
+          </div>
+          <div class="box">
+            <p class="eyebrow orange small">Everyone else</p>
+            <h4>Send the API key</h4>
+            <p>In the <code>X-Api-Key</code> header, or the slicer's API Key field. The key is made
+              at first boot. Refused requests get a 401, and in a browser it explains the fix.</p>
+            <p class="cmd"><code>apikey new</code></p>
+          </div>
+        </div>
+        <p class="callout"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span>No TLS, and CORS stays open. The API key crosses the network in clear text, so keep
+          Halyard on a network you trust.</span></p>
+      </section>
+
+      <section class="ref-sec" id="updates" aria-labelledby="updates-h">
+        <h3 id="updates-h">Updates and rollback</h3>
+        <p>Two update paths share one installer. Mainsail's Update Manager (the Machine page) is the
+          everyday way; the built-in update page is the fallback.</p>
+        <div class="three">
+          <div class="box sand">
+            <h4 class="mono">halyard</h4>
+            <p>The firmware. The check reads the latest release's <code>SHA256SUMS</code>; Update
+              writes <code>firmware.bin</code> to the other app slot and switches only once its
+              SHA-256 matches.</p>
+          </div>
+          <div class="box sand">
+            <h4 class="mono">mainsail</h4>
+            <p>The Mainsail this firmware ships with. Installed as one archive and swapped in only
+              when complete; the one before is kept as <code>www.prev</code>.</p>
+          </div>
+          <div class="box sand">
+            <h4 class="mono">/halyard/</h4>
+            <p>The fallback page, built into the firmware. Takes a <code>firmware.bin</code>, a
+              <code>mainsail.zip</code> or a card zip from your computer, and can go back to the
+              previous Mainsail.</p>
+          </div>
+        </div>
+        <div class="trial">
+          <p class="eyebrow small">New firmware boots on trial</p>
+          <ol class="flow" role="list">
+            <li>Write the other slot</li>
+            <li>Boot on trial</li>
+            <li>Answer an authorised request</li>
+            <li class="done">Confirmed</li>
+          </ol>
+          <p>A reset before that, or no answer within 5 minutes, and the bootloader goes back to the
+            previous image. An update is refused (409) while a file is being copied to the printer,
+            and allowed during a print, since the printer feeds itself (Mainsail's own panel waits
+            for the print to end).</p>
+        </div>
+      </section>
+
+      <section class="ref-sec" id="klipper" aria-labelledby="klipper-h">
+        <h3 id="klipper-h">Klipper’s commands in Marlin terms</h3>
+        <p>Mainsail's buttons send Klipper commands. Halyard translates the ones Marlin has an
+          equivalent for, reads settings back from Marlin's own reports, and leaves the rest out so
+          Halyard's Mainsail hides those panels.</p>
+        <div class="table-wrap">
+          <table class="wide">
+            <thead><tr><th scope="col">In Mainsail</th><th scope="col">The printer gets</th><th scope="col">Without the feature</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Jog and extrude buttons</th><td><code class="g">the moves, then G90 and M82</code></td><td>Always there</td></tr>
+              <tr><th scope="row">Z offset</th><td><code class="g">M290 P0 Z…</code> (babysteps)</td><td>No <code>Cap:BABYSTEPPING</code>: hidden</td></tr>
+              <tr><th scope="row">Z offset save</th><td><code class="g">M851 Z</code> (old + babysteps)</td><td>No <code>Cap:Z_PROBE</code>: no save button</td></tr>
+              <tr><th scope="row">Pressure advance</th><td><code class="g">M900 K…</code> (Linear Advance)</td><td>No answer to <code>M900</code>: panel hidden</td></tr>
+              <tr><th scope="row">Velocity and acceleration limits</th><td><code class="g">M203 X… Y…</code> · <code class="g">M204 P… T…</code></td><td>No <code>M203</code>/<code>M204</code> reports: panel hidden</td></tr>
+              <tr><th scope="row">Square corner velocity, accel to decel, cruise ratio</th><td>nothing: Marlin has none</td><td>Always hidden</td></tr>
+              <tr><th scope="row">Speed and flow sliders</th><td><code class="g">M220 S…</code> · <code class="g">M221 S…</code></td><td>No report: the slider stays at 100 %</td></tr>
+              <tr><th scope="row">Endstops</th><td><code class="g">M119</code></td><td>Always there: every Marlin has <code>M119</code></td></tr>
+              <tr><th scope="row">Part fan</th><td>nothing: Marlin can't report the fan's speed</td><td>Always hidden; <code>M106 S…</code> in the console</td></tr>
+              <tr><th scope="row">Bed and extruder PID tune</th><td><code class="g">M303 E-1 S60 C8 U1</code><br><code class="g">M303 E0 S210 C8 U1</code></td><td><code>Bad heater id</code> becomes the error</td></tr>
+              <tr><th scope="row"><code>CALIBRATE_Z_OFFSET</code></th><td><code class="g">G28</code>, then <code class="g">G30</code> at the bed's centre, then Mainsail's manual-probe dialog</td><td>No <code>Cap:Z_PROBE</code>: not listed</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fine">Homed axes are mirrored from the <code>G28</code>s Halyard sent and forgotten
+          whenever the steppers may have gone off. Moves on an unhomed axis are refused, as Klipper
+          does: Marlin's software endstops only apply to homed axes. Nothing is saved on its own:
+          SAVE CONFIG (<code>M500</code>) keeps a calibration result, and is offered only with
+          <code>Cap:EEPROM</code>.</p>
+      </section>
+
+      <section class="ref-sec" id="faster" aria-labelledby="faster-h">
+        <h3 id="faster-h">Make it faster</h3>
+        <p>Halyard works with Marlin's stock settings and uses these when the printer has them. Each
+          is optional, and each has a tested fallback
+          (<a href="https://github.com/tallbiscuits/halyard/blob/main/docs/decisions.md">decisions.md</a>, D5).</p>
+        <div class="table-wrap">
+          <table class="wide">
+            <thead><tr><th scope="col">Marlin option</th><th scope="col">What it gives</th></tr></thead>
+            <tbody>
+              <tr><th scope="row"><code class="key">BINARY_FILE_TRANSFER</code></th><td>Copies to the printer's card about 3× faster, checksummed and compressed</td></tr>
+              <tr><th scope="row"><code class="key">RX_BUFFER_SIZE 1024</code>, <code class="key">BAUDRATE 250000</code></th><td>Faster, safer copies (the headers have no flow control)</td></tr>
+              <tr><th scope="row"><code class="key">ADVANCED_OK</code></th><td>More commands in flight at once</td></tr>
+              <tr><th scope="row"><code class="key">LONG_FILENAME_HOST_SUPPORT</code></th><td>Real file names on the printer's card, not just 8.3 names</td></tr>
+              <tr><th scope="row"><code class="key">EMERGENCY_PARSER</code></th><td>Cancel and stop act at once instead of waiting in the queue</td></tr>
+              <tr><th scope="row"><code class="key">AUTO_REPORT_TEMPERATURES</code>, <code class="key">AUTO_REPORT_SD_STATUS</code></th><td>The printer pushes status instead of being polled</td></tr>
+              <tr><th scope="row"><code class="key">HOST_ACTION_COMMANDS</code></th><td>Pauses from the printer's own screen show up in Mainsail</td></tr>
+              <tr><th scope="row"><code class="key">POWER_LOSS_RECOVERY</code></th><td>Works, because the printer prints from its own card</td></tr>
+              <tr><th scope="row"><code class="key">EEPROM_SETTINGS</code></th><td>SAVE CONFIG in Mainsail keeps calibration results</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ref-sec" id="building" aria-labelledby="building-h">
+        <h3 id="building-h">Building from source</h3>
+        <p>Everything runs from the repository's root through <code>run.sh</code>, with PlatformIO
+          for the firmware and Docker for esptool and the Mainsail build.
+          <a href="https://github.com/tallbiscuits/halyard/blob/main/docs/firmware.md">docs/firmware.md</a>
+          has the details and every command.</p>
+        <div class="term">
+          <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>halyard — bash</span></div>
+<pre><code>./run.sh test                                <span class="c"># the host tests, under ASan/UBSan</span>
+./run.sh flash                               <span class="c"># tests, build, flash the GEEK over USB</span>
+./run.sh card /media/…/CARD "SSID" PASSWORD  <span class="c"># prepare a card: halyard.cfg and Mainsail</span>
+./run.sh ota [host]                          <span class="c"># update over WiFi, then check the version</span>
+./run.sh monitor                             <span class="c"># the USB console</span>
+./run.sh release [VERSION]                   <span class="c"># the release files and the web flasher</span>
+./run.sh flasher                             <span class="c"># try the web flasher on localhost</span>
+./run.sh site [latest]                       <span class="c"># this website, with the flasher</span></code></pre>
+        </div>
+      </section>
+
+      <section class="ref-sec" id="limitations" aria-labelledby="limits-h">
+        <h3 id="limits-h">Limitations</h3>
+        <div class="two even limits">
+          <div class="box sand"><h4>No exFAT</h4><p>The card must be FAT32, so 32 GB or smaller. A
+            card it can't mount looks like no card.</p></div>
+          <div class="box sand"><h4>No TLS</h4><p>CORS stays open, and the API key crosses the network
+            in clear text.</p></div>
+          <div class="box sand"><h4>Rollback covers the trial only</h4><p>An image that answers once
+            and fails later is kept. <code>./run.sh flash</code> over USB recovers it.</p></div>
+          <div class="box sand"><h4>History lives in memory</h4><p>A restart forgets the print
+            history. Request headers are limited to 1024 bytes.</p></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-row">
+    <div>
+      <p class="footer-brand">Halyard</p>
+      <p>Free software under the <a href="https://github.com/tallbiscuits/halyard/blob/main/LICENSE">GPL v3 or later</a>, like Marlin and Mainsail.</p>
+      <p class="fonts">Fonts: Space Grotesk, Inter and IBM Plex Mono, served from this site under the
+        SIL Open Font License (<a href="fonts/OFL-SpaceGrotesk.txt">Space Grotesk</a>,
+        <a href="fonts/OFL-Inter.txt">Inter</a>, <a href="fonts/OFL-IBMPlexMono.txt">IBM Plex Mono</a>).
+        No cookies, no tracking.</p>
+    </div>
+    <p class="footer-links"><a href="flasher/">Web flasher</a>
+      <a class="mono" href="https://github.com/tallbiscuits/halyard">github.com/tallbiscuits/halyard</a></p>
+  </div>
+</footer>
+
+<script>
+// The sidebar marks the reference section in view. Without script it is a plain list of links.
+(() => {
+  const links = [...document.querySelectorAll('.sidebar a')];
+  const secs = links.map(a => document.querySelector(a.getAttribute('href')));
+  const mark = () => {
+    let cur = 0;
+    secs.forEach((s, i) => { if (s.getBoundingClientRect().top < innerHeight * 0.35) cur = i; });
+    links.forEach((a, i) => i === cur ? a.setAttribute('aria-current', 'true') : a.removeAttribute('aria-current'));
+  };
+  addEventListener('scroll', mark, { passive: true });
+  addEventListener('resize', mark);
+  mark();
+})();
+</script>
+</body>
+</html>
